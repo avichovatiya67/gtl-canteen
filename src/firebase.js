@@ -1,6 +1,5 @@
-import { initializeApp } from "firebase/app";
-import "firebase/firestore";
-import { Firestore } from "firebase/firestore";
+import firebase from "firebase/compat/app";
+import "firebase/compat/firestore";
 
 // const firebaseConfig = {
 //   apiKey: "YOUR_API_KEY",
@@ -20,7 +19,19 @@ const firebaseConfig = {
   appId: "1:115410252401:web:cc3e7f835d0dfd55cde1d0",
   measurementId: "G-MKXK0Q76G0",
 };
-const app = initializeApp(firebaseConfig);
-const db = new Firestore(app);
+
+// Configure Firebase Details for Yash's Project
+// const firebaseConfig = {
+//   apiKey: "AIzaSyBkWU_7vWrgRx0Dc5cDaSTe9hG6C2AR1bQ",
+//   authDomain: "reactapp-32963.firebaseapp.com",
+//   databaseURL: "https://reactapp-32963-default-rtdb.firebaseio.com",
+//   projectId: "reactapp-32963",
+//   storageBucket: "reactapp-32963.appspot.com",
+//   messagingSenderId: "527706986382",
+//   appId: "1:527706986382:web:8e316d8f6aefee664bf6df",
+//   measurementId: "G-9LB8XE3TWZ"
+// };
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 
 export { db };

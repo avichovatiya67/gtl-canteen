@@ -2,12 +2,11 @@ import React, { useState, useEffect } from "react";
 import QrReader from "react-qr-scanner";
 
 const QrScanner = ({ onScan }) => {
-  const [result, setResult] = useState(null);
+//   const [result, setResult] = useState(null);
 
   const handleScan = (data) => {
     if (data) {
-      console.log(data);
-      setResult(data.text);
+    //   setResult(data.text);
       onScan(data.text); // You can send the data to Firebase or handle it as needed
     }
   };
@@ -16,14 +15,12 @@ const QrScanner = ({ onScan }) => {
     console.error(err);
   };
 
-  useEffect(() => {
-    setResult(null);
-
-    return () => {
-      // Clean up resources (e.g., stop the camera) when the component is unmounted
-      setResult(null);
-    };
-  }, []);
+//   useEffect(() => {
+//     setResult(null);
+//     return () => {
+//       setResult(null);
+//     };
+//   }, []);
 
   return (
     <div>
@@ -32,11 +29,13 @@ const QrScanner = ({ onScan }) => {
         onError={handleError}
         onScan={handleScan}
         style={{ width: "300px" }}
-        // constraints={{
-        //     facingMode: 'environment'
-        // }}
+        // style={{ width: "50px" }}
+        constraints={{
+          video: {
+            facingMode: "environment",
+          },
+        }}
       />
-      {result && <p>Scanned QR Code: {result}</p>}
     </div>
   );
 };
