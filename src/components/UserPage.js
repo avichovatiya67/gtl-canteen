@@ -32,7 +32,7 @@ const UserPage = () => {
   const [userScanData, setUserScanData] = useState(null);
   let search = useLocation().search;
   let params = new URLSearchParams(search);
-  let uid = params.get("uid");
+  let uid = parseInt(params.get("uid"));
   let uname = params.get("uname");
 
   const handleProductClick = async (product) => {
@@ -71,72 +71,49 @@ const UserPage = () => {
     };
   };
 
-  useEffect(async () => {
-    let configTime = await getConfigTime();
-    console.log("uid: ", uid);
+  useEffect(() => {
     let unsub;
-    if (uid) {
-      // Fetch and listen for updates from Firebase
-      const dateToday = await fetchDate();
-      const q = query(
-        collection(db, "scannedData"),
-        where("empId", "==", uid),
-        where("date", "==", dateToday.toLocaleDateString())
-      );
-      unsub = onSnapshot(q, (querySnapshot) => {
-        let scanData = null;
-        if (querySnapshot.size) {
-          const data = querySnapshot.docs.map((doc) => doc.data())[0];
-          scanData = {
-            isMorning:
-              dateToday.getHours() <= (configTime.morningEndTime.hours || 13) &&
-              dateToday.getMinutes() <= (configTime.morningEndTime.minutes || 0)
-                ? data.isMorning
-                  ? 2
-                  : 1
-                : 0,
-            isEvening:
-              dateToday.getHours() >= configTime.eveningStartTime.hours &&
-              dateToday.getMinutes() >= configTime.eveningStartTime.minutes
-                ? data.isEvening
-                  ? 2
-                  : 1
-                : 0,
-            isSnack:
-              dateToday.getHours() >= (configTime.eveningStartTime.hours || 16) &&
-              dateToday.getMinutes() >= (configTime.eveningStartTime.minutes || 30)
-                ? data.isSnack
-                  ? 2
-                  : 1
-                : 0,
-          };
-          console.log("Scan Data: ", scanData);
+    const setUserData = async () => {
+      if (uid) {
+        let configTime = await getConfigTime();
+        const dateToday = await fetchDate();
+        let morningEndTime = new Date(dateToday);
+        morningEndTime.setHours(configTime.morningEndTime.hours);
+        morningEndTime.setMinutes(configTime.morningEndTime.minutes);
+        let eveningStartTime = new Date(dateToday);
+        eveningStartTime.setHours(configTime.eveningStartTime.hours);
+        eveningStartTime.setMinutes(configTime.eveningStartTime.minutes);
+
+        // Fetch and listen for updates from Firebase
+        const q = query(
+          collection(db, "scannedData"),
+          where("empId", "==", uid),
+          where("date", "==", dateToday.toLocaleDateString())
+        );
+        unsub = onSnapshot(q, (querySnapshot) => {
+          let scanData = null;
+          if (querySnapshot.size) {
+            const data = querySnapshot.docs.map((doc) => doc.data())[0];
+            scanData = {
+              isMorning: dateToday <= morningEndTime ? (data.isMorning ? 2 : 1) : 0,
+              isEvening: dateToday >= eveningStartTime ? (data.isEvening ? 2 : 1) : 0,
+              isSnack: dateToday >= eveningStartTime ? (data.isSnack ? 2 : 1) : 0,
+            };
+          } else {
+            scanData = {
+              isMorning: dateToday <= morningEndTime ? 1 : 0,
+              isEvening: dateToday >= eveningStartTime ? 1 : 0,
+              isSnack: dateToday >= eveningStartTime ? 1 : 0,
+            };
+          }
           setUserScanData(scanData);
-        } else {
-          scanData = {
-            isMorning:
-              dateToday.getHours() <= configTime.morningEndTime.hours &&
-              dateToday.getMinutes() <= configTime.morningEndTime.minutes
-                ? 1
-                : 0,
-            isEvening:
-              dateToday.getHours() >= configTime.eveningStartTime.hours &&
-              dateToday.getMinutes() >= configTime.eveningStartTime.minutes
-                ? 1
-                : 0,
-            isSnack:
-              dateToday.getHours() >= (configTime.eveningStartTime.hours || 16) &&
-              dateToday.getMinutes() >= (configTime.eveningStartTime.minutes || 30)
-                ? 1
-                : 0,
-          };
-        }
-        setUserScanData(scanData);
-      });
-    }
+        });
+      }
+    };
+    setUserData();
 
     return () => {
-      unsub();
+      if (unsub) unsub();
       setSelectedProduct(null);
       setQrData(null);
     };

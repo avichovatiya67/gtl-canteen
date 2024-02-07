@@ -1,49 +1,17 @@
 import React, { useEffect, useState, useRef } from "react";
 import firebase from "firebase/compat/app";
 import "firebase/compat/firestore";
-import {
-  collection,
-  getDocs,
-  onSnapshot,
-  orderBy,
-  query,
-  where,
-} from "firebase/firestore";
+import { collection, getDocs, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { db } from "../firebase";
 import QrScanner from "./QrScanner";
 import { fetchDate } from "../utils/getDate";
-import {
-  Alert,
-  Backdrop,
-  CircularProgress,
-  Fab,
-  Snackbar,
-} from "@mui/material";
+import { Alert, Backdrop, CircularProgress, Fab, Snackbar } from "@mui/material";
 import { yellow } from "@mui/material/colors";
 import VerifiedIcon from "@mui/icons-material/Verified";
 import NewReleasesIcon from "@mui/icons-material/NewReleases";
-import {
-  CalendarIcon,
-  DateField,
-  DatePicker,
-  LocalizationProvider,
-  MobileDatePicker,
-} from "@mui/x-date-pickers";
+import { LocalizationProvider, MobileDatePicker } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
-const months = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
+const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const VendorPage = () => {
   const [scannedUsers, setScannedUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -130,10 +98,7 @@ const VendorPage = () => {
           if (data.product === "Morning") updatedDoc.isMorning = true;
           else if (data.product === "Evening") updatedDoc.isEvening = true;
           else if (data.product === "Snack") updatedDoc.isSnack = true;
-          const modifiedData = await db
-            .collection("scannedData")
-            .doc(ifExists.id)
-            .set(updatedDoc);
+          const modifiedData = await db.collection("scannedData").doc(ifExists.id).set(updatedDoc);
           console.log("Document modified with ID: ", modifiedData);
           // console.log(ifExists.id, "Document modified with ID: ", updatedDoc);
           setSnackbarData({ message: "Scan Verified!", severity: "success" });
@@ -151,39 +116,41 @@ const VendorPage = () => {
   };
 
   // Fetch and listen for updates from Firebase for Today's Data
-  useEffect(async () => {
-    // Fetch and listen for updates from Firebase
-    const dateToday = await fetchDate();
-    const q = query(
-      collection(db, "scannedData"),
-      where("date", "==", dateToday.toLocaleDateString()),
-      orderBy("modified", "desc")
-    );
-    const unsub = onSnapshot(q, (querySnapshot) => {
-      if (querySnapshot.size) {
-        const data = querySnapshot.docs.map((doc) => doc.data());
-        // setScannedUsers(data);
-        setHighlightIndex(0);
-        setScannedCount({
-          morning: data.filter((user) => user.isMorning).length,
-          evening: data.filter((user) => user.isEvening).length,
-          snack: data.filter((user) => user.isSnack).length,
-        });
-      }
-      setIsPrimaryLoading(false);
-    });
-    return () => unsub();
+  useEffect(() => {
+    let unsub;
+    const getData = async () => {
+      const dateToday = await fetchDate();
+      const q = query(
+        collection(db, "scannedData"),
+        where("date", "==", dateToday.toLocaleDateString()),
+        orderBy("modified", "desc")
+      );
+      unsub = onSnapshot(q, (querySnapshot) => {
+        if (querySnapshot.size) {
+          const data = querySnapshot.docs.map((doc) => doc.data());
+          setScannedUsers(data);
+          setHighlightIndex(0);
+          setScannedCount({
+            morning: data.filter((user) => user.isMorning).length,
+            evening: data.filter((user) => user.isEvening).length,
+            snack: data.filter((user) => user.isSnack).length,
+          });
+        }
+        setIsPrimaryLoading(false);
+      });
+    };
+    getData();
+
+    return () => {
+      if (unsub) unsub();
+    };
   }, []);
 
   // Fetch Filtered Data from Firebase
   useEffect(() => {
     if (dateFilter) {
       setIsPrimaryLoading(true);
-      const q = query(
-        collection(db, "scannedData"),
-        where("date", "==", dateFilter),
-        orderBy("modified", "desc")
-      );
+      const q = query(collection(db, "scannedData"), where("date", "==", dateFilter), orderBy("modified", "desc"));
 
       // Fetch the data from Firebase on Date Change only once without snapshot
       getDocs(q).then((querySnapshot) => {
@@ -250,10 +217,7 @@ const VendorPage = () => {
         {/* Todays Item Box */}
 
         {/* Scanner Section with Counts */}
-        <div
-          style={{ position: "relative" }}
-          className="d-flex align-items-center justify-content-center m-3"
-        >
+        <div style={{ position: "relative" }} className="d-flex align-items-center justify-content-center m-3">
           {/* Scanner and Loader */}
           <div
             ref={qrScannerRef}
@@ -292,16 +256,10 @@ const VendorPage = () => {
             {Object.keys(scannedCount || {}).map((key, index) => (
               <Fab size="large" key={index} variant="extended">
                 <div className="d-flex flex-column justify-content-center align-items-center">
-                  <h1
-                    className="m-0 p-0 text-center"
-                    style={{ lineHeight: 0.5 }}
-                  >
+                  <h1 className="m-0 p-0 text-center" style={{ lineHeight: 0.5 }}>
                     {scannedCount[key]}
                   </h1>
-                  <h6
-                    className="text-muted text-capitalize"
-                    style={{ marginBottom: "-5px", lineHeight: 1 }}
-                  >
+                  <h6 className="text-muted text-capitalize" style={{ marginBottom: "-5px", lineHeight: 1 }}>
                     {key}
                   </h6>
                 </div>
@@ -314,12 +272,7 @@ const VendorPage = () => {
         <div>
           {scannedUsers.length ? (
             scannedUsers.map((user, index) => (
-              <DetailsCard
-                user={user}
-                key={index}
-                id={index}
-                highlightIndex={highlightIndex}
-              />
+              <DetailsCard user={user} key={index} id={index} highlightIndex={highlightIndex} />
             ))
           ) : (
             <div className="d-flex justify-content-center align-items-center">
@@ -344,27 +297,23 @@ const VendorPage = () => {
           >
             <div>
               <h1 className="m-0 p-0 text-center" style={{ lineHeight: 1 }}>
-                {dateFilter
-                  ? dateFilter.slice(0, 2)
-                  : new Date().toLocaleDateString().slice(0, 2)}
+                {dateFilter ? dateFilter.slice(0, 2) : new Date().toLocaleDateString().slice(0, 2)}
               </h1>
-              <h6
-                className="text-capitalize"
-                style={{ marginBottom: "-5px", lineHeight: 1 }}
-              >
+              <h6 className="text-capitalize" style={{ marginBottom: "-5px", lineHeight: 1 }}>
                 {dateFilter
                   ? months[parseInt(dateFilter.slice(3, 5))]
-                  : months[
-                      parseInt(new Date().toLocaleDateString(0).slice(3, 5))
-                    ]}
+                  : months[parseInt(new Date().toLocaleDateString(0).slice(3, 5))]}
               </h6>
             </div>
 
-            <div className="invisible" style={{
-              position: "absolute",
-              bottom: "0px",
-              right: "0px",
-            }}>
+            <div
+              className="invisible"
+              style={{
+                position: "absolute",
+                bottom: "0px",
+                right: "0px",
+              }}
+            >
               <LocalizationProvider dateAdapter={AdapterDayjs}>
                 <MobileDatePicker
                   open={isDatePickerOpen}
@@ -382,11 +331,7 @@ const VendorPage = () => {
         </div>
       </div>
 
-      <Snackbar
-        open={Boolean(snackbarData?.message)}
-        autoHideDuration={2000}
-        onClose={() => setSnackbarData(null)}
-      >
+      <Snackbar open={Boolean(snackbarData?.message)} autoHideDuration={2000} onClose={() => setSnackbarData(null)}>
         {snackbarData?.severity && (
           <Alert
             onClose={() => setSnackbarData(null)}
@@ -426,21 +371,12 @@ const DetailsCard = ({ user, highlightIndex, id }) => {
       <div className="card-body p-2">
         <h6 className="d-flex justify-content-between">
           <div>{user.name}</div>
-          <div className="text-secondary">
-            {new Date(user.created?.seconds * 1000).toTimeString().slice(0, 5)}
-          </div>
+          <div className="text-secondary">{new Date(user.created?.seconds * 1000).toTimeString().slice(0, 5)}</div>
         </h6>
         <div className="d-flex justify-content-around">
           {["isMorning", "isEvening", "isSnack"].map((key, index) => (
-            <div
-              key={index}
-              className="d-flex flex-column justify-content-end align-items-center"
-            >
-              {user[key] ? (
-                <VerifiedIcon color="success" />
-              ) : (
-                <NewReleasesIcon color="disabled" />
-              )}
+            <div key={index} className="d-flex flex-column justify-content-end align-items-center">
+              {user[key] ? <VerifiedIcon color="success" /> : <NewReleasesIcon color="disabled" />}
               <>{key.slice(2)}</>
             </div>
           ))}
