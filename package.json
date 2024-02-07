@@ -4,11 +4,17 @@
   "dependencies": {
     "@emotion/react": "^11.11.3",
     "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "^5.15.7",
     "@mui/material": "^5.15.7",
+    "@mui/x-date-pickers": "^6.19.3",
+    "@yudiel/react-qr-scanner": "^1.2.6",
+    "dayjs": "^1.11.10",
     "firebase": "^10.8.0",
+    "firebase-tools": "^13.2.0",
     "qrcode.react": "^3.1.0",
-
+    "react": "^18.0.0",
     "react-bootstrap": "^2.1.0",
+    "react-dom": "18.2.0",
     "react-qr-code": "^2.0.12",
     "react-qr-reader": "^3.0.0-beta-1",
     "react-qr-scanner": "^1.0.0-alpha.11",

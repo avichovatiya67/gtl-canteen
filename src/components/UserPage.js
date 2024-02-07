@@ -1,99 +1,154 @@
 import React, { useState, useEffect } from "react";
 
-import tea from "../assets/ic_tea.png";
-import tea_scanned from "../assets/ic_tea_bw.png";
+import tea from "../assets/tea.png";
+import tea_disabled from "../assets/tea_bw.png";
 import snacks from "../assets/snacks.png";
-import snacks_scanned from "../assets/snacks_bw.png";
+import snacks_disabled from "../assets/snacks_bw.png";
+import scanned from "../assets/scanned.png";
 
 import QRCode from "react-qr-code";
 import { fetchDate } from "../utils/getDate";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { db } from "../firebase";
+import { useLocation, useParams, useSearchParams } from "react-router-dom";
+
+const generateRandomName = () => {
+  const firstNames = ["Alice", "Bob", "Charlie", "David", "Eva", "Frank", "Grace", "Henry", "Ivy", "Jack"];
+  const lastNames = ["Smith", "Johnson", "Williams", "Jones", "Brown", "Davis", "Miller", "Wilson", "Moore", "Taylor"];
+
+  const randomFirstName = firstNames[Math.floor(Math.random() * firstNames.length)];
+  const randomLastName = lastNames[Math.floor(Math.random() * lastNames.length)];
+
+  return `${randomFirstName} ${randomLastName}`;
+};
+const namesArray = Array.from({ length: 10 }, generateRandomName);
+// const empId = Math.floor(10000 + Math.random() * 90000);
+// const name = namesArray[Math.floor(Math.random() * namesArray.length)];
 
 const UserPage = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [qrData, setQrData] = useState(null);
-  const [scannedData, setScannedData] = useState(null);
-  const [morning_tea, evening_tea, evening_snacks] = [tea, tea, snacks];
+  // 0 ==> not scanned/disabled, 1 ==> available/clickable, 2 ==> already scanned/scanned
+  const [userScanData, setUserScanData] = useState(null);
+  let search = useLocation().search;
+  let params = new URLSearchParams(search);
+  let uid = params.get("uid");
+  let uname = params.get("uname");
 
   const handleProductClick = async (product) => {
+    if (selectedProduct === product) return;
     setSelectedProduct(product);
     // generate 5 digit number randomly
-    const empId = Math.floor(10000 + Math.random() * 90000);
+
     const date = await fetchDate();
     var dataForQr = {
-      empId,
+      empId: uid,
+      name: uname,
       product,
       date: new Date(date).toLocaleDateString(),
     };
-    setQrData(JSON.stringify(dataForQr));
     console.log("QR Data: ", JSON.stringify(dataForQr));
+    setQrData(JSON.stringify(dataForQr));
   };
 
-
-  // const handleScanned = async (data) => {
-  //   const product = selectedProduct; // Use the selected product
-  //   setSelectedProduct(null); // Reset the selected product
-  //   setScannedData(product);
-  //   console.log("Scanned QR Code:", data);
-  //   // Store the scanned data in Firebase
-  //   let doc = {
-  //     empId: 540125,
-  //     name: "John Doe",
-  //     product: product,
-  //     qrData: data,
-  //     timestamp: new Date().toDateString(),
-  //   };
-  //   console.log("doc", doc);
-  //   const createdData = await db.collection("scannedData").add(doc);
-
-  //   console.log("Document written with ID: ", createdData);
-  // };
-
-  // const getCameraPermission = async () => {
-  //   // await navigator?.mediaDevices
-  //   //   ?.getUserMedia({ video: true })
-  //   //   .then((stream) => {
-  //   //     alert("Camera permission granted");
-  //   //     console.log("Camera permission granted:", stream);
-  //   //   })
-  //   //   .catch((error) => {
-  //   //     alert("Camera permission denied");
-  //   //     console.log("Camera permission denied:", error);
-  //   //   });
-
-  //   await navigator.permissions
-  //     .query({ name: "camera" })
-  //     .then((permissionStatus) => {
-  //       // alert("Camera permission granted 123");
-  //       console.log("Camera permission state:", permissionStatus.state);
-  //     })
-  //     .catch((error) => {
-  //       // alert("Camera permission denied 123");
-  //       console.log("Permission query error:", error);
-  //     });
-  // };
-
-  // useEffect(() => {
-  //   getCameraPermission();
-  // }, []);
   const iconSize = {
     height: "80px",
     width: "80px",
   };
+
+  const getConfigTime = async () => {
+    const config = await db.collection("config").doc("timing").get();
+    const data = config.data();
+    return {
+      morningEndTime: {
+        hours: parseInt(data.morningEndTime.split(":")[0]),
+        minutes: parseInt(data.morningEndTime.split(":")[1]),
+      },
+      eveningStartTime: {
+        hours: parseInt(data.eveningStartTime.split(":")[0]),
+        minutes: parseInt(data.eveningStartTime.split(":")[1]),
+      },
+    };
+  };
+
+  useEffect(async () => {
+    let configTime = await getConfigTime();
+    console.log("uid: ", uid);
+    let unsub;
+    if (uid) {
+      // Fetch and listen for updates from Firebase
+      const dateToday = await fetchDate();
+      const q = query(
+        collection(db, "scannedData"),
+        where("empId", "==", uid),
+        where("date", "==", dateToday.toLocaleDateString())
+      );
+      unsub = onSnapshot(q, (querySnapshot) => {
+        let scanData = null;
+        if (querySnapshot.size) {
+          const data = querySnapshot.docs.map((doc) => doc.data())[0];
+          scanData = {
+            isMorning:
+              dateToday.getHours() <= (configTime.morningEndTime.hours || 13) &&
+              dateToday.getMinutes() <= (configTime.morningEndTime.minutes || 0)
+                ? data.isMorning
+                  ? 2
+                  : 1
+                : 0,
+            isEvening:
+              dateToday.getHours() >= configTime.eveningStartTime.hours &&
+              dateToday.getMinutes() >= configTime.eveningStartTime.minutes
+                ? data.isEvening
+                  ? 2
+                  : 1
+                : 0,
+            isSnack:
+              dateToday.getHours() >= (configTime.eveningStartTime.hours || 16) &&
+              dateToday.getMinutes() >= (configTime.eveningStartTime.minutes || 30)
+                ? data.isSnack
+                  ? 2
+                  : 1
+                : 0,
+          };
+          console.log("Scan Data: ", scanData);
+          setUserScanData(scanData);
+        } else {
+          scanData = {
+            isMorning:
+              dateToday.getHours() <= configTime.morningEndTime.hours &&
+              dateToday.getMinutes() <= configTime.morningEndTime.minutes
+                ? 1
+                : 0,
+            isEvening:
+              dateToday.getHours() >= configTime.eveningStartTime.hours &&
+              dateToday.getMinutes() >= configTime.eveningStartTime.minutes
+                ? 1
+                : 0,
+            isSnack:
+              dateToday.getHours() >= (configTime.eveningStartTime.hours || 16) &&
+              dateToday.getMinutes() >= (configTime.eveningStartTime.minutes || 30)
+                ? 1
+                : 0,
+          };
+        }
+        setUserScanData(scanData);
+      });
+    }
+
+    return () => {
+      unsub();
+      setSelectedProduct(null);
+      setQrData(null);
+    };
+  }, [uid]);
 
   return (
     <>
       <div className="container text-center mt-3">
         <h5>Please Select Your Menu</h5>
 
-        <div
-          className="d-flex align-items-center justify-content-center"
-          style={{ height: "50vh" }}
-        >
-          {qrData ? (
-            <QRCode value={qrData} />
-          ) : (
-            <h2>What you want to avail ?</h2>
-          )}
+        <div className="d-flex align-items-center justify-content-center" style={{ height: "50vh" }}>
+          {qrData ? <QRCode value={qrData} /> : <h2>What you want to avail ?</h2>}
         </div>
 
         <h5 className="my-2" style={{ height: "48px" }}>
@@ -113,49 +168,56 @@ const UserPage = () => {
           className="row mx-auto d-flex justify-content-center gap-2"
           style={{ width: "100%", fontSize: "10px", fontWeight: "bold" }}
         >
-          <div
-            className="col-md-4 p-3 mb-3 border rounded-3 border-dark d-flex flex-column gap-2 align-items-center"
-            style={{ ...iconSize }}
-            onClick={() => handleProductClick("Morning")}
-          >
-            <img height={"70%"} width={"70%"} src={morning_tea} />
-            MORNING
-          </div>
-          <div
-            className="col-md-4 p-3 mb-3 border rounded-3 border-dark d-flex flex-column gap-2 align-items-center"
-            style={{ ...iconSize }}
-            onClick={() => handleProductClick("Evening")}
-          >
-            <img height={"70%"} width={"70%"} src={evening_tea} />
-            EVENING
-          </div>
-          <div
-            className="col-md-4 p-3 mb-3 border rounded-3 border-dark d-flex flex-column gap-2 align-items-center"
-            style={{ ...iconSize }}
-            onClick={() => handleProductClick("Snack")}
-          >
-            <img height={"70%"} width={"70%"} src={evening_snacks} />
-            SNACKS
-          </div>
+          {["Morning", "Evening", "Snack"].map((product, index) => (
+            <ProductCard
+              key={index}
+              product={product}
+              selectedProduct={selectedProduct}
+              onClick={handleProductClick}
+              status={userScanData ? userScanData[`is${product}`] : 0}
+              style={{ ...iconSize }}
+            />
+          ))}
         </div>
-        {/* <button onClick={() => handleProductClick("Tea")}>Tea</button>
-        <button onClick={() => handleProductClick("Coffee")}>Coffee</button>
-        <button onClick={() => handleProductClick("Snack")}>Snack</button> */}
-        {scannedData && <h3>Scanned QR Code: {scannedData}</h3>}
       </div>
-      {/* <Backdrop
-        open={selectedProduct !== null}
-        // className="text-center"
-        sx={{ backgroundColor: "rgb(0 0 0 / 00%)", color: "white" }}
-        onClick={() => setSelectedProduct(null)}
-      >
-        <div style={{height:"100vh"}}>
-          {selectedProduct === "Morning" && <QrScanner onScan={handleScanned} />}
-          {selectedProduct === "Evening" && <QrScanner onScan={handleScanned} />}
-          {selectedProduct === "Snack" && <QrScanner onScan={handleScanned} />}
-        </div>
-      </Backdrop> */}
     </>
+  );
+};
+
+const ProductCard = ({ product, selectedProduct, onClick, status = 2, style }) => {
+  const icons = {
+    Morning: {
+      0: tea_disabled,
+      1: tea,
+      2: tea_disabled,
+    },
+    Evening: {
+      0: tea_disabled,
+      1: tea,
+      2: tea_disabled,
+    },
+    Snack: {
+      0: snacks_disabled,
+      1: snacks,
+      2: snacks_disabled,
+    },
+  };
+  return (
+    <div
+      className={
+        "border rounded-3 d-flex flex-column align-items-center" +
+        (selectedProduct === product ? " bg-light border-warning" : " border-dark") +
+        (status !== 1 ? " disabled" : "")
+      }
+      style={{ ...style }}
+      onClick={status === 1 ? () => onClick(product) : null}
+    >
+      {status === 2 && <img style={{ position: "fixed", ...style }} src={scanned} />}
+      <div className="mt-3 d-flex flex-column gap-2 align-items-center">
+        <img height={"70%"} width={"70%"} src={icons[product][status]} alt={product} />
+        {product.toUpperCase()}
+      </div>
+    </div>
   );
 };
 
