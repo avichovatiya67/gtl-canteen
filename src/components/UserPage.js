@@ -9,21 +9,22 @@ import scanned from "../assets/scanned.png";
 import QRCode from "react-qr-code";
 import { fetchDate } from "../utils/getDate";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
-import { db } from "../firebase";
+import { db } from "../utils/firebase";
 import { useLocation, useParams, useSearchParams } from "react-router-dom";
+import canteen from "../assets/canteen.png";
+import { decryptData, encryptData } from "../utils/crypto";
+// const generateRandomName = () => {
+//   const firstNames = ["Alice", "Bob", "Charlie", "David", "Eva", "Frank", "Grace", "Henry", "Ivy", "Jack"];
+//   const lastNames = ["Smith", "Johnson", "Williams", "Jones", "Brown", "Davis", "Miller", "Wilson", "Moore", "Taylor"];
 
-const generateRandomName = () => {
-  const firstNames = ["Alice", "Bob", "Charlie", "David", "Eva", "Frank", "Grace", "Henry", "Ivy", "Jack"];
-  const lastNames = ["Smith", "Johnson", "Williams", "Jones", "Brown", "Davis", "Miller", "Wilson", "Moore", "Taylor"];
+//   const randomFirstName = firstNames[Math.floor(Math.random() * firstNames.length)];
+//   const randomLastName = lastNames[Math.floor(Math.random() * lastNames.length)];
 
-  const randomFirstName = firstNames[Math.floor(Math.random() * firstNames.length)];
-  const randomLastName = lastNames[Math.floor(Math.random() * lastNames.length)];
-
-  return `${randomFirstName} ${randomLastName}`;
-};
-const namesArray = Array.from({ length: 10 }, generateRandomName);
-// const empId = Math.floor(10000 + Math.random() * 90000);
-// const name = namesArray[Math.floor(Math.random() * namesArray.length)];
+//   return `${randomFirstName} ${randomLastName}`;
+// };
+// const namesArray = Array.from({ length: 10 }, generateRandomName);
+// const uid = Math.floor(10000 + Math.random() * 90000);
+// const uname = namesArray[Math.floor(Math.random() * namesArray.length)];
 
 const UserPage = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -38,7 +39,6 @@ const UserPage = () => {
   const handleProductClick = async (product) => {
     if (selectedProduct === product) return;
     setSelectedProduct(product);
-    // generate 5 digit number randomly
 
     const date = await fetchDate();
     var dataForQr = {
@@ -47,13 +47,14 @@ const UserPage = () => {
       product,
       date: new Date(date).toLocaleDateString(),
     };
-    console.log("QR Data: ", JSON.stringify(dataForQr));
-    setQrData(JSON.stringify(dataForQr));
+    const encryptedData = encryptData(dataForQr);
+    setQrData(encryptedData);
+    console.log("encrypted QR Data: ", encryptedData);
   };
 
   const iconSize = {
-    height: "80px",
-    width: "80px",
+    height: "90px",
+    width: "90px",
   };
 
   const getConfigTime = async () => {
@@ -120,14 +121,18 @@ const UserPage = () => {
   }, [uid]);
 
   return (
-    <>
-      <div className="container text-center mt-3">
-        <h5>Please Select Your Menu</h5>
+    <div className="container text-center mt-3">
+      <h5>Please Select Your Menu</h5>
 
-        <div className="d-flex align-items-center justify-content-center" style={{ height: "50vh" }}>
-          {qrData ? <QRCode value={qrData} /> : <h2>What you want to avail ?</h2>}
-        </div>
+      <div className="d-flex align-items-center justify-content-center" style={{ height: "50vh" }}>
+        {qrData && selectedProduct && userScanData && userScanData[`is${selectedProduct}`] == 1 ? (
+          <QRCode value={qrData} />
+        ) : (
+          <img src={canteen} height={"100%"} />
+        )}
+      </div>
 
+      {qrData && selectedProduct && userScanData && userScanData[`is${selectedProduct}`] == 1 ? (
         <h5 className="my-2" style={{ height: "48px" }}>
           {selectedProduct && (
             <>
@@ -140,24 +145,33 @@ const UserPage = () => {
               : "Evening Snacks"
             : null) || "Refreshments"}
         </h5>
+      ) : selectedProduct ? (
+        <h5 className="my-2" style={{ height: "48px" }}>
+          Enjoy Your Day !!
+        </h5>
+      ) : (
+        <h5 className="my-2" style={{ height: "48px" }}>
+          Please Select Your Refreshment!
+        </h5>
+      )}
 
-        <div
-          className="row mx-auto d-flex justify-content-center gap-2"
-          style={{ width: "100%", fontSize: "10px", fontWeight: "bold" }}
-        >
-          {["Morning", "Evening", "Snack"].map((product, index) => (
-            <ProductCard
-              key={index}
-              product={product}
-              selectedProduct={selectedProduct}
-              onClick={handleProductClick}
-              status={userScanData ? userScanData[`is${product}`] : 0}
-              style={{ ...iconSize }}
-            />
-          ))}
-        </div>
+      {/* Product Cards */}
+      <div
+        className="row mx-auto d-flex justify-content-center gap-2"
+        style={{ width: "100%", fontSize: "10px", fontWeight: "bold" }}
+      >
+        {["Morning", "Evening", "Snack"].map((product, index) => (
+          <ProductCard
+            key={index}
+            product={product}
+            selectedProduct={selectedProduct}
+            onClick={handleProductClick}
+            status={userScanData ? userScanData[`is${product}`] : 0}
+            style={{ ...iconSize }}
+          />
+        ))}
       </div>
-    </>
+    </div>
   );
 };
 

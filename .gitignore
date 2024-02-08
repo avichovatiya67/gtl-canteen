@@ -1,2 +1,8 @@
 node_modules
 package-lock.json
+.env
+.env.development
+.env.eg
+.env.production
+.firebaserc
+.firebase/hosting.YnVpbGQ.cache

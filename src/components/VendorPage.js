@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef } from "react";
 import firebase from "firebase/compat/app";
 import "firebase/compat/firestore";
-import { collection, getDocs, onSnapshot, orderBy, query, where } from "firebase/firestore";
-import { db } from "../firebase";
+import { collection, doc, getDocs, onSnapshot, orderBy, query, setDoc, where } from "firebase/firestore";
+import { db } from "../utils/firebase";
 import QrScanner from "./QrScanner";
 import { fetchDate } from "../utils/getDate";
 import { Alert, Backdrop, CircularProgress, Fab, Snackbar } from "@mui/material";
@@ -27,89 +27,95 @@ const VendorPage = () => {
   const qrScannerRef = useRef(null);
   // const [qrScannerDiv, setQrScannerDiv] = useState(null);
 
-  const verifyData = async (data, product) => {
+  const verifyProductStatus = (doc, product) => {
     const prodMap = {
       Morning: "isMorning",
       Evening: "isEvening",
       Snack: "isSnack",
     };
-    const q = query(
-      collection(db, "scannedData"),
-      where("empId", "==", data.empId),
-      where("date", "==", data.date)
-      // where(prodMap[product], "==", true)
-    );
+    return doc[prodMap[product]];
+  };
+
+  const verifyData = async (data) => {
+    const q = query(collection(db, "scannedData"), where("empId", "==", data.empId), where("date", "==", data.date));
     const doc_refs = await getDocs(q);
 
-    if (doc_refs.size === 0) return 0;
+    if (doc_refs.size === 0) return null; // No records exists
     else {
       const doc = doc_refs.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }))[0];
-      console.log("docId===>", doc);
-      if (doc[prodMap[product]]) return 1;
-      else return doc;
+      return doc; // Return the first record
     }
   };
 
   const handleScanned = async (data) => {
+    // debugger;
     try {
       if (isLoading) return;
+      // console.log("handleScanned===>", data);
       setIsLoading(true);
+      console.log("Scanned QR Code:", data);
+      data = data && typeof data === "object" ? data : null;
       const date = await fetchDate();
-
-      // console.log("Scanned QR Code:", JSON.parse(data));
-      data = data ? JSON.parse(data) : null;
 
       // Store the scanned data in Firebase
       if (data?.date === new Date(date).toLocaleDateString()) {
         let newDoc = {
           empId: data.empId,
           name: data.name,
-          isMorning: false,
-          isEvening: false,
-          isSnack: false,
+          isMorning: data.product === "Morning",
+          isEvening: data.product === "Evening",
+          isSnack: data.product === "Snack",
           // product: data.product,
           date: new Date(date).toLocaleDateString(),
           created: firebase.firestore.FieldValue.serverTimestamp(),
           modified: firebase.firestore.FieldValue.serverTimestamp(),
         };
-        if (data.product === "Morning") newDoc.isMorning = true;
-        else if (data.product === "Evening") newDoc.isEvening = true;
-        else if (data.product === "Snack") newDoc.isSnack = true;
 
-        var ifExists = await verifyData(newDoc, data.product);
-        if (ifExists === 1) {
-          // Already Availed
-          console.log("Data already exists!");
-          setSnackbarData({ message: "Already Availed!", severity: "error" });
-        } else if (ifExists === 0) {
-          // New Entry
-          setSnackbarData({ message: "Scan Verified!", severity: "success" });
-          const createdData = await db.collection("scannedData").add(newDoc);
-          console.log("Document written with ID: ", createdData);
+        var existingDoc = await verifyData(newDoc, data.product);
+        if (existingDoc) {
+          const productStatus = verifyProductStatus(existingDoc, data.product);
+          if (productStatus) {
+            // Already Availed
+            setSnackbarData({ message: "Already Availed!", severity: "error" });
+            // console.log("Already Availed!");
+          } else {
+            // Entry Exists but not Availed
+            const updatedDoc = {
+              modified: firebase.firestore.FieldValue.serverTimestamp(),
+            };
+            if (data.product === "Morning") updatedDoc.isMorning = true;
+            else if (data.product === "Evening") updatedDoc.isEvening = true;
+            else if (data.product === "Snack") updatedDoc.isSnack = true;
+            const modifiedData = await db.collection("scannedData").doc(existingDoc.id).update(updatedDoc);
+            setSnackbarData({ message: "Scan Verified!", severity: "success" });
+            // console.log("Document modified with ID: ", modifiedData);
+          }
         } else {
-          // Entry Exists but not Availed
-          const updatedDoc = {
-            ...ifExists,
-            modified: firebase.firestore.FieldValue.serverTimestamp(),
-          };
-          if (data.product === "Morning") updatedDoc.isMorning = true;
-          else if (data.product === "Evening") updatedDoc.isEvening = true;
-          else if (data.product === "Snack") updatedDoc.isSnack = true;
-          const modifiedData = await db.collection("scannedData").doc(ifExists.id).set(updatedDoc);
-          console.log("Document modified with ID: ", modifiedData);
-          // console.log(ifExists.id, "Document modified with ID: ", updatedDoc);
+          // New Entry
+          // const createdData = await setDoc(doc(db, "scannedData", newDoc.empId+''), newDoc)
+          const createdData = await db.collection("scannedData").add(newDoc);
           setSnackbarData({ message: "Scan Verified!", severity: "success" });
+          // console.log("Document written with ID: ", createdData);
         }
       } else {
-        console.log("QR Code Expired!");
-        setSnackbarData({ message: "QR Code Expired!", severity: "error" });
+        const reqDate = data.date.split("/");
+        const reqDateObj = new Date(reqDate[2], reqDate[1] - 1, reqDate[0]);
+        if (reqDateObj < new Date(date)) {
+          // QR Code Expired
+          console.log("QR Code Expired!");
+          setSnackbarData({ message: "QR Code Expired!", severity: "error" });
+        } else {
+          // Invalid QR Code
+          console.log("Invalid QR Code!");
+          setSnackbarData({ message: "Invalid QR Code!", severity: "error" });
+        }
       }
     } catch (error) {
-      console.log("Error: ", error);
-      setSnackbarData({ message: "Something went wrong!", severity: "error" });
+      console.log("Error: ", error.message);
+      setSnackbarData({ message: "Invalid QR Code!", severity: "error" });
     } finally {
       setIsLoading(false);
     }
@@ -231,16 +237,28 @@ const VendorPage = () => {
               width: "100%",
             }}
           >
-            {isLoading ? (
-              <div className="d-flex align-items-center justify-content-center">
-                <CircularProgress />
+            {isLoading && (
+              <div
+                className={"d-flex align-items-center justify-content-center"}
+                style={{
+                  position: "absolute",
+                  zIndex: 1000,
+                  height: "100%",
+                  width: "100%",
+                  backgroundColor: "rgba(0, 0, 0, 0.8)",
+                  borderRadius: "10px",
+                }}
+              >
+                <CircularProgress size={50} thickness={4} />
               </div>
-            ) : (
-              <QrScanner
-                onScan={handleScanned}
-                // style={{ width: window.screen.width }}
-              />
             )}
+            <QrScanner
+              onScan={!isLoading ? handleScanned : null}
+              setSnackbarData={setSnackbarData}
+              isLoading={isLoading}
+              // style={{ width: window.screen.width }}
+            />
+            {/* )} */}
           </div>
           {/* Counts */}
           <div

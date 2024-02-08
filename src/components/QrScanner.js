@@ -1,16 +1,56 @@
-import { CircularProgress } from "@mui/material";
-import React, { useState, useEffect } from "react";
+import React, { useCallback } from "react";
 // import QrReader from "react-qr-scanner";
 import { QrReader } from "react-qr-reader";
-const MyQrScanner = ({ onScan }) => {
-  //   const [result, setResult] = useState(null);
+import { decryptData } from "../utils/crypto";
+const MyQrScanner = ({ onScan, setSnackbarData, isLoading }) => {
+  let qrData = null;
+  let curTime = -1;
 
-  const handleScan = (data) => {
-    if (data) {
-      //   setResult(data.text);
-      onScan(data.text); // You can send the data to Firebase or handle it as needed
+  const getTimeDiff = () => {
+    const newTime = new Date().getTime();
+    const diff = newTime - curTime;
+    if (diff / 1000 >= 2) {
+      curTime = newTime;
+      return true;
+    } else {
+      return false;
     }
   };
+
+  const getDecryptedData = (data) => {
+    let decryptedData = decryptData(data);
+    return decryptedData;
+  };
+
+  const handleScan = useCallback(
+    (data) => {
+      if (data) {
+        if (data.text !== qrData) {
+          qrData = data.text;
+          let decryptedData = getDecryptedData(data.text);
+          onScan(decryptedData);
+          // onScan(data.text);
+          curTime = new Date().getTime() + 4000;
+        } else {
+          let isDiff = getTimeDiff();
+          if (isDiff && !isLoading) {
+            setSnackbarData({
+              message: "QR code is already scanned",
+              severity: "warning",
+            });
+          }
+        }
+      }
+    },
+    [onScan]
+  );
+  // if (!isLoading) {
+  //   if (data) {
+  //     // debugger;
+  //     setIsLoading(true);
+  //     onScan(data.text);
+  //   }
+  // }
 
   const handleError = (err) => {
     console.error(err);
@@ -25,14 +65,14 @@ const MyQrScanner = ({ onScan }) => {
 
   return (
     <QrReader
-      scanDelay={2000}
-      onError={handleError}
+      scanDelay={5000}
+      // onError={handleError}
       onResult={handleScan}
       constraints={{
         facingMode: "environment",
       }}
       containerStyle={{
-        height:"inherit"
+        height: "inherit",
       }}
       videoContainerStyle={{
         padding: "0",
