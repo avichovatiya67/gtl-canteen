@@ -4,7 +4,7 @@ import "firebase/compat/firestore";
 import { collection, doc, getDocs, onSnapshot, orderBy, query, setDoc, where } from "firebase/firestore";
 import { db } from "../utils/firebase";
 import QrScanner from "./QrScanner";
-import { fetchDate } from "../utils/getDate";
+import { fetchDate, getDDMMYYYY } from "../utils/getDate";
 import { Alert, Backdrop, CircularProgress, Fab, Snackbar } from "@mui/material";
 import { yellow } from "@mui/material/colors";
 import VerifiedIcon from "@mui/icons-material/Verified";
@@ -54,22 +54,20 @@ const VendorPage = () => {
     // debugger;
     try {
       if (isLoading) return;
-      // console.log("handleScanned===>", data);
       setIsLoading(true);
-      console.log("Scanned QR Code:", data);
       data = data && typeof data === "object" ? data : null;
       const date = await fetchDate();
+      const formattedDate = getDDMMYYYY(date);
 
       // Store the scanned data in Firebase
-      if (data?.date === new Date(date).toLocaleDateString()) {
+      if (data?.date === formattedDate) {
         let newDoc = {
           empId: data.empId,
           name: data.name,
           isMorning: data.product === "Morning",
           isEvening: data.product === "Evening",
           isSnack: data.product === "Snack",
-          // product: data.product,
-          date: new Date(date).toLocaleDateString(),
+          date: formattedDate,
           created: firebase.firestore.FieldValue.serverTimestamp(),
           modified: firebase.firestore.FieldValue.serverTimestamp(),
         };
@@ -126,11 +124,8 @@ const VendorPage = () => {
     let unsub;
     const getData = async () => {
       const dateToday = await fetchDate();
-      const q = query(
-        collection(db, "scannedData"),
-        where("date", "==", dateToday.toLocaleDateString()),
-        orderBy("modified", "desc")
-      );
+      const formattedDate = getDDMMYYYY(dateToday);
+      const q = query(collection(db, "scannedData"), where("date", "==", formattedDate), orderBy("modified", "desc"));
       unsub = onSnapshot(q, (querySnapshot) => {
         if (querySnapshot.size) {
           const data = querySnapshot.docs.map((doc) => doc.data());
@@ -233,7 +228,7 @@ const VendorPage = () => {
               boxShadow: "0px 0px 10px 0px #000000",
               overflow: "hidden",
               // height: qrScannerDiv + "px",
-              height: window.screen.width - 50,
+              // height: window.screen.width - 50,
               width: "100%",
             }}
           >
@@ -315,12 +310,12 @@ const VendorPage = () => {
           >
             <div>
               <h1 className="m-0 p-0 text-center" style={{ lineHeight: 1 }}>
-                {dateFilter ? dateFilter.slice(0, 2) : new Date().toLocaleDateString().slice(0, 2)}
+                {dateFilter ? dateFilter.slice(0, 2) : getDDMMYYYY(new Date()).slice(0, 2)}
               </h1>
               <h6 className="text-capitalize" style={{ marginBottom: "-5px", lineHeight: 1 }}>
                 {dateFilter
-                  ? months[parseInt(dateFilter.slice(3, 5))]
-                  : months[parseInt(new Date().toLocaleDateString(0).slice(3, 5))]}
+                  ? months[parseInt(dateFilter.slice(3, 5)) - 1]
+                  : months[parseInt(getDDMMYYYY(new Date()).slice(3, 5)) - 1]}
               </h6>
             </div>
 
@@ -340,7 +335,7 @@ const VendorPage = () => {
                   onClose={() => setDatePickerOpen(false)}
                   onAccept={(date) => {
                     setDatePickerOpen(false);
-                    setDateFilter(new Date(date).toLocaleDateString());
+                    setDateFilter(getDDMMYYYY(date));
                   }}
                 />
               </LocalizationProvider>

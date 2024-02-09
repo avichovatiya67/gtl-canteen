@@ -7,20 +7,20 @@ import snacks_disabled from "../assets/snacks_bw.png";
 import scanned from "../assets/scanned.png";
 
 import QRCode from "react-qr-code";
-import { fetchDate } from "../utils/getDate";
+import { fetchDate, getDDMMYYYY } from "../utils/getDate";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../utils/firebase";
-import { useLocation, useParams, useSearchParams } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import canteen from "../assets/canteen.png";
 import { decryptData, encryptData } from "../utils/crypto";
 // const generateRandomName = () => {
-//   const firstNames = ["Alice", "Bob", "Charlie", "David", "Eva", "Frank", "Grace", "Henry", "Ivy", "Jack"];
-//   const lastNames = ["Smith", "Johnson", "Williams", "Jones", "Brown", "Davis", "Miller", "Wilson", "Moore", "Taylor"];
+        //   const firstNames = ["Alice", "Bob", "Charlie", "David", "Eva", "Frank", "Grace", "Henry", "Ivy", "Jack"];
+        //   const lastNames = ["Smith", "Johnson", "Williams", "Jones", "Brown", "Davis", "Miller", "Wilson", "Moore", "Taylor"];
 
-//   const randomFirstName = firstNames[Math.floor(Math.random() * firstNames.length)];
-//   const randomLastName = lastNames[Math.floor(Math.random() * lastNames.length)];
+        //   const randomFirstName = firstNames[Math.floor(Math.random() * firstNames.length)];
+        //   const randomLastName = lastNames[Math.floor(Math.random() * lastNames.length)];
 
-//   return `${randomFirstName} ${randomLastName}`;
+        //   return `${randomFirstName} ${randomLastName}`;
 // };
 // const namesArray = Array.from({ length: 10 }, generateRandomName);
 // const uid = Math.floor(10000 + Math.random() * 90000);
@@ -45,11 +45,11 @@ const UserPage = () => {
       empId: uid,
       name: uname,
       product,
-      date: new Date(date).toLocaleDateString(),
+      date: getDDMMYYYY(date),
     };
     const encryptedData = encryptData(dataForQr);
     setQrData(encryptedData);
-    console.log("encrypted QR Data: ", encryptedData);
+    // console.log("encrypted QR Data: ", encryptedData);
   };
 
   const iconSize = {
@@ -89,7 +89,7 @@ const UserPage = () => {
         const q = query(
           collection(db, "scannedData"),
           where("empId", "==", uid),
-          where("date", "==", dateToday.toLocaleDateString())
+          where("date", "==", getDDMMYYYY(dateToday))
         );
         unsub = onSnapshot(q, (querySnapshot) => {
           let scanData = null;
