@@ -1,27 +1,34 @@
 import React, { useEffect, useState, useRef } from "react";
 import firebase from "firebase/compat/app";
 import "firebase/compat/firestore";
-import { collection, doc, getDocs, onSnapshot, orderBy, query, setDoc, where } from "firebase/firestore";
+import { collection, getDocs, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { db } from "../utils/firebase";
 import QrScanner from "./QrScanner";
-import { fetchDate, getDDMMYYYY } from "../utils/getDate";
-import { Alert, Backdrop, CircularProgress, Fab, Snackbar } from "@mui/material";
+import { fetchDate, getDDMMYYYY, getHHMM } from "../utils/getDate";
+import { Alert, Backdrop, Box, CircularProgress, Fab, Snackbar, Tab, Tabs } from "@mui/material";
 import { yellow } from "@mui/material/colors";
 import VerifiedIcon from "@mui/icons-material/Verified";
 import NewReleasesIcon from "@mui/icons-material/NewReleases";
-import { LocalizationProvider, MobileDatePicker } from "@mui/x-date-pickers";
+import { CalendarIcon, LocalizationProvider, MobileDatePicker } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import DateRangePicker from "@wojtekmaj/react-daterange-picker";
+import "@wojtekmaj/react-daterange-picker/dist/DateRangePicker.css";
+import "react-calendar/dist/Calendar.css";
+
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const VendorPage = () => {
   const [scannedUsers, setScannedUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isPrimaryLoading, setIsPrimaryLoading] = useState(true);
   const [snackbarData, setSnackbarData] = useState(null);
-  const [scannedCount, setScannedCount] = useState(null);
+  const [scannedCount, setScannedCount] = useState({ morning: 0, evening: 0, snack: 0 });
   const [highlightIndex, setHighlightIndex] = useState(null);
+  const [selectedFloor, setSelectedFloor] = useState(0);
+  const [isCameraOpen, setIsCameraOpen] = useState(true);
 
   // State for Date Filter
   const [dateFilter, setDateFilter] = useState(null);
+  const [dateRangeFilter, setDateRangeFilter] = useState([new Date(), new Date()]);
   const [isDatePickerOpen, setDatePickerOpen] = useState(false);
 
   const qrScannerRef = useRef(null);
@@ -68,6 +75,7 @@ const VendorPage = () => {
           isEvening: data.product === "Evening",
           isSnack: data.product === "Snack",
           date: formattedDate,
+          floor: selectedFloor,
           created: firebase.firestore.FieldValue.serverTimestamp(),
           modified: firebase.firestore.FieldValue.serverTimestamp(),
         };
@@ -125,7 +133,11 @@ const VendorPage = () => {
     const getData = async () => {
       const dateToday = await fetchDate();
       const formattedDate = getDDMMYYYY(dateToday);
-      const q = query(collection(db, "scannedData"), where("date", "==", formattedDate), orderBy("modified", "desc"));
+      const filterConditions = [
+        where("date", "==", formattedDate),
+        selectedFloor ? where("floor", "==", selectedFloor) : null,
+      ].filter((condition) => condition !== null);
+      const q = query(collection(db, "scannedData"), ...filterConditions, orderBy("modified", "desc"));
       unsub = onSnapshot(q, (querySnapshot) => {
         if (querySnapshot.size) {
           const data = querySnapshot.docs.map((doc) => doc.data());
@@ -145,13 +157,22 @@ const VendorPage = () => {
     return () => {
       if (unsub) unsub();
     };
-  }, []);
+  }, [selectedFloor]);
 
   // Fetch Filtered Data from Firebase
   useEffect(() => {
-    if (dateFilter) {
+    const isRange = dateRangeFilter[0].getTime() !== dateRangeFilter[1].getTime();
+    if (dateFilter || isRange) {
       setIsPrimaryLoading(true);
-      const q = query(collection(db, "scannedData"), where("date", "==", dateFilter), orderBy("modified", "desc"));
+
+      const filterConditions = [
+        dateFilter ? where("date", "==", dateFilter) : null,
+        isRange ? where("modified", ">=", firebase.firestore.Timestamp.fromDate(dateRangeFilter[0])) : null,
+        isRange ? where("modified", "<=", firebase.firestore.Timestamp.fromDate(dateRangeFilter[1])) : null,
+        selectedFloor ? where("floor", "==", selectedFloor) : null,
+      ].filter((condition) => condition !== null);
+
+      const q = query(collection(db, "scannedData"), ...filterConditions, orderBy("modified", "desc"));
 
       // Fetch the data from Firebase on Date Change only once without snapshot
       getDocs(q).then((querySnapshot) => {
@@ -173,24 +194,23 @@ const VendorPage = () => {
         }
         setIsPrimaryLoading(false);
       });
-
-      // const unsub = onSnapshot(q, (querySnapshot) => {
-      //   console.log("q===>", querySnapshot);
-      //   if (querySnapshot.size) {
-      //     const data = querySnapshot.docs.map((doc) => doc.data());
-      //     setScannedUsers(data);
-      //     setScannedCount({
-      //       morning: data.filter((user) => user.isMorning).length,
-      //       evening: data.filter((user) => user.isEvening).length,
-      //       snack: data.filter((user) => user.isSnack).length,
-      //     });
-      //   }
-      //   setIsPrimaryLoading(false);
-      // });
-
-      // return () => unsub();
     }
-  }, [dateFilter]);
+    // const unsub = onSnapshot(q, (querySnapshot) => {
+    //   console.log("q===>", querySnapshot);
+    //   if (querySnapshot.size) {
+    //     const data = querySnapshot.docs.map((doc) => doc.data());
+    //     setScannedUsers(data);
+    //     setScannedCount({
+    //       morning: data.filter((user) => user.isMorning).length,
+    //       evening: data.filter((user) => user.isEvening).length,
+    //       snack: data.filter((user) => user.isSnack).length,
+    //     });
+    //   }
+    //   setIsPrimaryLoading(false);
+    // });
+
+    // return () => unsub();
+  }, [dateFilter, selectedFloor, dateRangeFilter]);
 
   // // Calculate Div Height for Loader
   // useEffect(() => {
@@ -201,60 +221,132 @@ const VendorPage = () => {
   //   setTimeout(handleLoad, 1000);
   // }, [qrScannerDiv]);
 
+  // Highlight the topmost card for 5 seconds
   useEffect(() => {
-    // Highlight the topmost card for 3 seconds
     const highlightTimeout = setTimeout(() => {
       setHighlightIndex(null);
-    }, 3000);
+    }, 5000);
 
     return () => {
       clearTimeout(highlightTimeout);
     };
   }, [highlightIndex]);
 
+  // Camera Visibility Change
+  useEffect(() => {
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") setIsCameraOpen(false);
+      if (document.visibilityState === "visible") setIsCameraOpen(true);
+    });
+
+    return () => {
+      document.removeEventListener("visibilitychange", () => {
+        setIsCameraOpen(false);
+      });
+    };
+  }, []);
+
+  const renderScannedRecords = () => {
+    return (
+      <div>
+        {scannedUsers.length ? (
+          scannedUsers.map((user, index) => (
+            <DetailsCard
+              user={user}
+              key={index}
+              id={index}
+              highlightIndex={highlightIndex}
+              selectedFloor={selectedFloor}
+            />
+          ))
+        ) : (
+          <div className="d-flex justify-content-center align-items-center">
+            <h6>No Data Found!</h6>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <>
       <div className="container-fluid p-2">
-        {/* Todays Item Box */}
+        {/* Tabs */}
+        <Tabs
+          variant="fullWidth"
+          value={selectedFloor}
+          onChange={(a, v) => {
+            setSelectedFloor(v);
+          }}
+        >
+          <Tab label="All" value={0} style={{ fontWeight: "bolder" }} />
+          <Tab label="Terrace" value={1} style={{ fontWeight: "bolder" }} />
+          <Tab label="Ground" value={2} style={{ fontWeight: "bolder" }} />
+        </Tabs>
 
         {/* Scanner Section with Counts */}
         <div style={{ position: "relative" }} className="d-flex align-items-center justify-content-center m-3">
           {/* Scanner and Loader */}
-          <div
-            ref={qrScannerRef}
-            className="d-flex align-items-center justify-content-center"
-            style={{
-              borderRadius: "10px",
-              boxShadow: "0px 0px 10px 0px #000000",
-              overflow: "hidden",
-              // height: qrScannerDiv + "px",
-              // height: window.screen.width - 50,
-              width: "100%",
-            }}
-          >
-            {isLoading && (
-              <div
-                className={"d-flex align-items-center justify-content-center"}
-                style={{
-                  position: "absolute",
-                  zIndex: 1000,
-                  height: "100%",
-                  width: "100%",
-                  backgroundColor: "rgba(0, 0, 0, 0.8)",
-                  borderRadius: "10px",
+          {selectedFloor != 0 ? (
+            <div
+              ref={qrScannerRef}
+              className="d-flex align-items-center justify-content-center"
+              style={{
+                borderRadius: "10px",
+                boxShadow: "0px 0px 10px 0px #000000",
+                overflow: "hidden",
+                // height: qrScannerDiv + "px",
+                // height: window.screen.width - 50,
+                width: "100%",
+              }}
+            >
+              {isLoading && (
+                <div
+                  className={"d-flex align-items-center justify-content-center"}
+                  style={{
+                    position: "absolute",
+                    zIndex: 1000,
+                    height: "100%",
+                    width: "100%",
+                    backgroundColor: "rgba(0, 0, 0, 0.8)",
+                    borderRadius: "10px",
+                  }}
+                >
+                  <CircularProgress size={50} thickness={4} />
+                </div>
+              )}
+              {isCameraOpen && (
+                <QrScanner
+                  onScan={!isLoading ? handleScanned : null}
+                  setSnackbarData={setSnackbarData}
+                  isLoading={isLoading}
+                  // style={{ width: window.screen.width }}
+                />
+              )}
+            </div>
+          ) : (
+            <div className="flex-grow-1" style={{ height: "110px", zIndex: "1100" }}>
+              <DateRangePicker
+                className="w-100 d-flex justify-content-between align-items-center"
+                onChange={(date) => {
+                  setDateRangeFilter(date);
+                  setDateFilter(null);
                 }}
-              >
-                <CircularProgress size={50} thickness={4} />
-              </div>
-            )}
-            <QrScanner
-              onScan={!isLoading ? handleScanned : null}
-              setSnackbarData={setSnackbarData}
-              isLoading={isLoading}
-              // style={{ width: window.screen.width }}
-            />
-            {/* )} */}
-          </div>
+                value={dateRangeFilter}
+                calendarClassName="card"
+                maxDate={new Date()}
+                calendarIcon={<CalendarIcon color="inherit" style={{ color: "#212529" }} />}
+                openCalendarOnFocus={false}
+                clearIcon={null}
+                format="dd-MM-yyyy"
+                rangeDivider=" to  "
+                dayPlaceholder="dd"
+                monthPlaceholder="mm"
+                yearPlaceholder="yyyy"
+              />
+            </div>
+          )}
+
           {/* Counts */}
           <div
             className="d-flex p-1 justify-content-around align-items-center"
@@ -281,18 +373,16 @@ const VendorPage = () => {
           </div>
         </div>
 
-        {/* Detail Cards */}
-        <div>
-          {scannedUsers.length ? (
-            scannedUsers.map((user, index) => (
-              <DetailsCard user={user} key={index} id={index} highlightIndex={highlightIndex} />
-            ))
-          ) : (
-            <div className="d-flex justify-content-center align-items-center">
-              <h6>No Data Found!</h6>
-            </div>
-          )}
-        </div>
+        {/* Tab Panels || Detail Cards */}
+        <CustomTabPanel value={selectedFloor} index={0}>
+          {renderScannedRecords()}
+        </CustomTabPanel>
+        <CustomTabPanel value={selectedFloor} index={1}>
+          {renderScannedRecords()}
+        </CustomTabPanel>
+        <CustomTabPanel value={selectedFloor} index={2}>
+          {renderScannedRecords()}
+        </CustomTabPanel>
 
         {/* Calendar Filter Button */}
         <div
@@ -336,6 +426,7 @@ const VendorPage = () => {
                   onAccept={(date) => {
                     setDatePickerOpen(false);
                     setDateFilter(getDDMMYYYY(date));
+                    setDateRangeFilter([new Date(date), new Date(date)]);
                   }}
                 />
               </LocalizationProvider>
@@ -372,7 +463,7 @@ const VendorPage = () => {
   );
 };
 
-const DetailsCard = ({ user, highlightIndex, id }) => {
+const DetailsCard = ({ user, highlightIndex, id, selectedFloor = 0 }) => {
   return (
     <div
       className="card m-2"
@@ -384,9 +475,13 @@ const DetailsCard = ({ user, highlightIndex, id }) => {
       <div className="card-body p-2">
         <h6 className="d-flex justify-content-between">
           <div>{user.name}</div>
-          <div className="text-secondary">{new Date(user.created?.seconds * 1000).toTimeString().slice(0, 5)}</div>
+          {/* {selectedFloor === 0 ? <div className="text-secondary">{["Terrace", "Ground"][user.floor-1]}</div> : null} */}
+          <div className="text-secondary">
+            {selectedFloor === 0 && ["Terrace", "Ground"][user.floor - 1] + " - "}
+            {getHHMM(user.created?.seconds * 1000)}
+          </div>
         </h6>
-        <div className="d-flex justify-content-around">
+        <div className="d-flex justify-content-between">
           {["isMorning", "isEvening", "isSnack"].map((key, index) => (
             <div key={index} className="d-flex flex-column justify-content-end align-items-center">
               {user[key] ? <VerifiedIcon color="success" /> : <NewReleasesIcon color="disabled" />}
@@ -399,31 +494,20 @@ const DetailsCard = ({ user, highlightIndex, id }) => {
   );
 };
 
-export default VendorPage;
+function CustomTabPanel(props) {
+  const { children, value, index, ...other } = props;
 
-{
-  /* <div className="d-flex flex-column justify-content-end align-items-center">
-  {user.isMorning ? (
-    <VerifiedIcon color="success" />
-  ) : (
-    <NewReleasesIcon color="warning" />
-  )}
-  <>Morning</>
-</div>
-<div className="d-flex flex-column justify-content-end align-items-center">
-  {user.isEvening ? (
-    <VerifiedIcon color="success" />
-  ) : (
-    <NewReleasesIcon color="warning" />
-  )}
-  <>Evening</>
-</div>
-<div className="d-flex flex-column justify-content-end align-items-center">
-  {user.isSnack ? (
-    <VerifiedIcon color="success" />
-  ) : (
-    <NewReleasesIcon color="warning" />
-  )}
-  <>Snacks</>
-</div> */
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`simple-tabpanel-${index}`}
+      aria-labelledby={`simple-tab-${index}`}
+      {...other}
+    >
+      {value === index && <Box sx={{ p: 1 }}>{children}</Box>}
+    </div>
+  );
 }
+
+export default VendorPage;

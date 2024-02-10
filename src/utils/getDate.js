@@ -19,3 +19,11 @@ export const getDDMMYYYY = (date) => {
     year: "numeric",
   });
 };
+
+// Get hh:mm from date in 12-hour format
+export const getHHMM = (date) => {
+  return new Date(date).toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};

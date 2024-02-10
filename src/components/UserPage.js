@@ -14,13 +14,13 @@ import { useLocation } from "react-router-dom";
 import canteen from "../assets/canteen.png";
 import { decryptData, encryptData } from "../utils/crypto";
 // const generateRandomName = () => {
-        //   const firstNames = ["Alice", "Bob", "Charlie", "David", "Eva", "Frank", "Grace", "Henry", "Ivy", "Jack"];
-        //   const lastNames = ["Smith", "Johnson", "Williams", "Jones", "Brown", "Davis", "Miller", "Wilson", "Moore", "Taylor"];
+//   const firstNames = ["Alice", "Bob", "Charlie", "David", "Eva", "Frank", "Grace", "Henry", "Ivy", "Jack"];
+//   const lastNames = ["Smith", "Johnson", "Williams", "Jones", "Brown", "Davis", "Miller", "Wilson", "Moore", "Taylor"];
 
-        //   const randomFirstName = firstNames[Math.floor(Math.random() * firstNames.length)];
-        //   const randomLastName = lastNames[Math.floor(Math.random() * lastNames.length)];
+//   const randomFirstName = firstNames[Math.floor(Math.random() * firstNames.length)];
+//   const randomLastName = lastNames[Math.floor(Math.random() * lastNames.length)];
 
-        //   return `${randomFirstName} ${randomLastName}`;
+//   return `${randomFirstName} ${randomLastName}`;
 // };
 // const namesArray = Array.from({ length: 10 }, generateRandomName);
 // const uid = Math.floor(10000 + Math.random() * 90000);
