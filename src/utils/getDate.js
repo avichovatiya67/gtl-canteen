@@ -11,3 +11,19 @@ export const fetchDate = async () => {
       return new Date();
     });
 };
+
+export const getDDMMYYYY = (date) => {
+  return new Date(date).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+};
+
+// Get hh:mm from date in 12-hour format
+export const getHHMM = (date) => {
+  return new Date(date).toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};

@@ -1,15 +1,16 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect } from "react";
 // import QrReader from "react-qr-scanner";
 import { QrReader } from "react-qr-reader";
 import { decryptData } from "../utils/crypto";
 const MyQrScanner = ({ onScan, setSnackbarData, isLoading }) => {
   let qrData = null;
   let curTime = -1;
+  let timeout = null;
 
-  const getTimeDiff = () => {
+  const getTimeDiff = (delay) => {
     const newTime = new Date().getTime();
     const diff = newTime - curTime;
-    if (diff / 1000 >= 2) {
+    if (diff >= delay) {
       curTime = newTime;
       return true;
     } else {
@@ -23,23 +24,40 @@ const MyQrScanner = ({ onScan, setSnackbarData, isLoading }) => {
   };
 
   const handleScan = useCallback(
-    (data) => {
+    (data, err) => {
       if (data) {
-        if (data.text !== qrData) {
-          qrData = data.text;
-          let decryptedData = getDecryptedData(data.text);
-          onScan(decryptedData);
-          // onScan(data.text);
-          curTime = new Date().getTime() + 4000;
-        } else {
-          let isDiff = getTimeDiff();
-          if (isDiff && !isLoading) {
-            setSnackbarData({
-              message: "QR code is already scanned",
-              severity: "warning",
-            });
+        try {
+          if (data.text !== qrData) {
+            qrData = data.text;
+            timeout = setTimeout(() => {
+              if(timeout) clearTimeout(timeout);
+              qrData = null;
+            }, 10000);
+            if (getTimeDiff(500)) {
+              let decryptedData = getDecryptedData(data.text);
+              // console.log("Decrypted Data: ", decryptedData);
+              onScan(decryptedData);
+              curTime = new Date().getTime() + 2000;
+            }
+          } else {
+            let isDiff = getTimeDiff(4000);
+            if (isDiff ) {
+              setSnackbarData({
+                message: "QR code is already scanned",
+                severity: "warning",
+              });
+            }
           }
+        } catch (error) {
+          console.log("Error: ", error);
+          setSnackbarData({
+            message: "Invalid QR code",
+            severity: "error",
+          });
         }
+      }
+      if (!!err && JSON.stringify(err) !== JSON.stringify({})) {
+        console.log(err);
       }
     },
     [onScan]
@@ -65,11 +83,15 @@ const MyQrScanner = ({ onScan, setSnackbarData, isLoading }) => {
 
   return (
     <QrReader
-      scanDelay={5000}
+      scanDelay={50}
       // onError={handleError}
       onResult={handleScan}
       constraints={{
         facingMode: "environment",
+        // sampleRate: {
+        //   ideal: 10,
+        // },
+        // aspectRatio: { ideal: 1 },
       }}
       containerStyle={{
         height: "inherit",
