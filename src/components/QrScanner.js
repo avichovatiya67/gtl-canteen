@@ -5,11 +5,12 @@ import { decryptData } from "../utils/crypto";
 const MyQrScanner = ({ onScan, setSnackbarData, isLoading }) => {
   let qrData = null;
   let curTime = -1;
+  let timeout = null;
 
-  const getTimeDiff = () => {
+  const getTimeDiff = (delay) => {
     const newTime = new Date().getTime();
     const diff = newTime - curTime;
-    if (diff / 1000 >= 2) {
+    if (diff >= delay) {
       curTime = newTime;
       return true;
     } else {
@@ -28,16 +29,19 @@ const MyQrScanner = ({ onScan, setSnackbarData, isLoading }) => {
         try {
           if (data.text !== qrData) {
             qrData = data.text;
-            setTimeout(() => {
+            timeout = setTimeout(() => {
+              if(timeout) clearTimeout(timeout);
               qrData = null;
-            }, 4000);
-            let decryptedData = getDecryptedData(data.text);
-            onScan(decryptedData);
-            // onScan(data.text);
-            curTime = new Date().getTime() + 4000;
+            }, 10000);
+            if (getTimeDiff(500)) {
+              let decryptedData = getDecryptedData(data.text);
+              // console.log("Decrypted Data: ", decryptedData);
+              onScan(decryptedData);
+              curTime = new Date().getTime() + 2000;
+            }
           } else {
-            let isDiff = getTimeDiff();
-            if (isDiff && !isLoading) {
+            let isDiff = getTimeDiff(4000);
+            if (isDiff ) {
               setSnackbarData({
                 message: "QR code is already scanned",
                 severity: "warning",

@@ -1,13 +1,30 @@
 import React, { useEffect, useState, useRef } from "react";
 import firebase from "firebase/compat/app";
 import "firebase/compat/firestore";
-import { collection, getDocs, onSnapshot, orderBy, query, where } from "firebase/firestore";
+import { addDoc, collection, getDocs, onSnapshot, orderBy, query, setDoc, sum, where } from "firebase/firestore";
 import { db } from "../utils/firebase";
 import QrScanner from "./QrScanner";
 import { fetchDate, getDDMMYYYY, getHHMM } from "../utils/getDate";
-import { Alert, Backdrop, Box, CircularProgress, Fab, Snackbar, Tab, Tabs } from "@mui/material";
+import {
+  Alert,
+  Backdrop,
+  Box,
+  CircularProgress,
+  Fab,
+  IconButton,
+  Input,
+  InputAdornment,
+  Popover,
+  Snackbar,
+  Stack,
+  Tab,
+  Tabs,
+} from "@mui/material";
 import { yellow } from "@mui/material/colors";
 import VerifiedIcon from "@mui/icons-material/Verified";
+import EditIcon from "@mui/icons-material/Edit";
+import CheckIcon from "@mui/icons-material/Check";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import NewReleasesIcon from "@mui/icons-material/NewReleases";
 import { CalendarIcon, LocalizationProvider, MobileDatePicker } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -15,6 +32,7 @@ import DateRangePicker from "@wojtekmaj/react-daterange-picker";
 import "@wojtekmaj/react-daterange-picker/dist/DateRangePicker.css";
 import "react-calendar/dist/Calendar.css";
 
+var showSnackbar = null;
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const VendorPage = () => {
   const [scannedUsers, setScannedUsers] = useState([]);
@@ -25,6 +43,7 @@ const VendorPage = () => {
   const [highlightIndex, setHighlightIndex] = useState(null);
   const [selectedFloor, setSelectedFloor] = useState(0);
   const [isCameraOpen, setIsCameraOpen] = useState(true);
+  showSnackbar = setSnackbarData;
 
   // State for Date Filter
   const [dateFilter, setDateFilter] = useState(null);
@@ -32,7 +51,6 @@ const VendorPage = () => {
   const [isDatePickerOpen, setDatePickerOpen] = useState(false);
 
   const qrScannerRef = useRef(null);
-  // const [qrScannerDiv, setQrScannerDiv] = useState(null);
 
   const verifyProductStatus = (doc, product) => {
     const prodMap = {
@@ -57,10 +75,12 @@ const VendorPage = () => {
     }
   };
 
+  let isOperating = false;
   const handleScanned = async (data) => {
     // debugger;
     try {
-      if (isLoading) return;
+      if (isOperating || isLoading) return;
+      isOperating = true;
       setIsLoading(true);
       data = data && typeof data === "object" ? data : null;
       const date = await fetchDate();
@@ -90,6 +110,7 @@ const VendorPage = () => {
           } else {
             // Entry Exists but not Availed
             const updatedDoc = {
+              floor: selectedFloor,
               modified: firebase.firestore.FieldValue.serverTimestamp(),
             };
             if (data.product === "Morning") updatedDoc.isMorning = true;
@@ -123,20 +144,24 @@ const VendorPage = () => {
       console.log("Error: ", error.message);
       setSnackbarData({ message: "Invalid QR Code!", severity: "error" });
     } finally {
+      isOperating = false;
       setIsLoading(false);
     }
   };
 
   // Fetch and listen for updates from Firebase for Today's Data
   useEffect(() => {
+    if (getDDMMYYYY(dateRangeFilter[0]) !== getDDMMYYYY(dateRangeFilter[1]) || dateFilter !== null) return;
     let unsub;
     const getData = async () => {
       const dateToday = await fetchDate();
       const formattedDate = getDDMMYYYY(dateToday);
+
       const filterConditions = [
         where("date", "==", formattedDate),
         selectedFloor ? where("floor", "==", selectedFloor) : null,
       ].filter((condition) => condition !== null);
+
       const q = query(collection(db, "scannedData"), ...filterConditions, orderBy("modified", "desc"));
       unsub = onSnapshot(q, (querySnapshot) => {
         if (querySnapshot.size) {
@@ -147,6 +172,13 @@ const VendorPage = () => {
             morning: data.filter((user) => user.isMorning).length,
             evening: data.filter((user) => user.isEvening).length,
             snack: data.filter((user) => user.isSnack).length,
+          });
+        } else {
+          setScannedUsers([]);
+          setScannedCount({
+            morning: 0,
+            evening: 0,
+            snack: 0,
           });
         }
         setIsPrimaryLoading(false);
@@ -160,10 +192,13 @@ const VendorPage = () => {
   }, [selectedFloor]);
 
   // Fetch Filtered Data from Firebase
-  useEffect(() => {
+  useEffect(async() => {
     const isRange = dateRangeFilter[0].getTime() !== dateRangeFilter[1].getTime();
     if (dateFilter || isRange) {
       setIsPrimaryLoading(true);
+      q = collection(db, "scannedData");
+      const snap = await getAggregateFromServer(q)
+      console.log("snap===>", snap.data().count());
 
       const filterConditions = [
         dateFilter ? where("date", "==", dateFilter) : null,
@@ -212,15 +247,6 @@ const VendorPage = () => {
     // return () => unsub();
   }, [dateFilter, selectedFloor, dateRangeFilter]);
 
-  // // Calculate Div Height for Loader
-  // useEffect(() => {
-  //   const handleLoad = () => {
-  //     const divHeight = qrScannerRef.current?.getBoundingClientRect().height;
-  //     if (divHeight >= qrScannerDiv) setQrScannerDiv(divHeight);
-  //   };
-  //   setTimeout(handleLoad, 1000);
-  // }, [qrScannerDiv]);
-
   // Highlight the topmost card for 5 seconds
   useEffect(() => {
     const highlightTimeout = setTimeout(() => {
@@ -245,6 +271,16 @@ const VendorPage = () => {
       });
     };
   }, []);
+
+  // // Calculate Div Height for Loader
+  // const [qrScannerDiv, setQrScannerDiv] = useState(null);
+  // useEffect(() => {
+  //   const handleLoad = () => {
+  //     const divHeight = qrScannerRef.current?.getBoundingClientRect().height;
+  //     if (divHeight >= qrScannerDiv) setQrScannerDiv(divHeight);
+  //   };
+  //   setTimeout(handleLoad, 1000);
+  // }, [qrScannerDiv]);
 
   const renderScannedRecords = () => {
     return (
@@ -272,19 +308,23 @@ const VendorPage = () => {
     <>
       <div className="container-fluid p-2">
         {/* Tabs */}
-        <Tabs
-          variant="fullWidth"
-          value={selectedFloor}
-          onChange={(a, v) => {
-            setSelectedFloor(v);
-          }}
-        >
-          <Tab label="All" value={0} style={{ fontWeight: "bolder" }} />
-          <Tab label="Terrace" value={1} style={{ fontWeight: "bolder" }} />
-          <Tab label="Ground" value={2} style={{ fontWeight: "bolder" }} />
-        </Tabs>
+        <div className="d-flex">
+          <Tabs
+            style={{ flexGrow: 1 }}
+            variant="fullWidth"
+            value={selectedFloor}
+            onChange={(a, v) => {
+              setSelectedFloor(v);
+            }}
+          >
+            <Tab label="All" value={0} style={{ fontWeight: "bolder" }} />
+            <Tab label="Terrace" value={1} style={{ fontWeight: "bolder" }} />
+            <Tab label="Ground" value={2} style={{ fontWeight: "bolder" }} />
+          </Tabs>
+          <MenuButton />
+        </div>
 
-        {/* Scanner Section with Counts */}
+        {/* Scanner Section with Counts OR Date Range Selection */}
         <div style={{ position: "relative" }} className="d-flex align-items-center justify-content-center m-3">
           {/* Scanner and Loader */}
           {selectedFloor != 0 ? (
@@ -325,26 +365,28 @@ const VendorPage = () => {
               )}
             </div>
           ) : (
-            <div className="flex-grow-1" style={{ height: "110px", zIndex: "1100" }}>
-              <DateRangePicker
-                className="w-100 d-flex justify-content-between align-items-center"
-                onChange={(date) => {
-                  setDateRangeFilter(date);
-                  setDateFilter(null);
-                }}
-                value={dateRangeFilter}
-                calendarClassName="card"
-                maxDate={new Date()}
-                calendarIcon={<CalendarIcon color="inherit" style={{ color: "#212529" }} />}
-                openCalendarOnFocus={false}
-                clearIcon={null}
-                format="dd-MM-yyyy"
-                rangeDivider=" to  "
-                dayPlaceholder="dd"
-                monthPlaceholder="mm"
-                yearPlaceholder="yyyy"
-              />
-            </div>
+            <>
+              <div className="flex-grow-1" style={{ height: "110px", zIndex: "1100" }}>
+                <DateRangePicker
+                  className="w-100 d-flex justify-content-between align-items-center"
+                  onChange={(date) => {
+                    setDateRangeFilter(date);
+                    setDateFilter(null);
+                  }}
+                  value={dateRangeFilter}
+                  calendarClassName="card"
+                  maxDate={new Date()}
+                  calendarIcon={<CalendarIcon color="inherit" style={{ color: "#212529" }} />}
+                  openCalendarOnFocus={false}
+                  clearIcon={null}
+                  format="dd-MM-yyyy"
+                  rangeDivider=" to  "
+                  dayPlaceholder="dd"
+                  monthPlaceholder="mm"
+                  yearPlaceholder="yyyy"
+                />
+              </div>
+            </>
           )}
 
           {/* Counts */}
@@ -364,9 +406,9 @@ const VendorPage = () => {
                   <h1 className="m-0 p-0 text-center" style={{ lineHeight: 0.5 }}>
                     {scannedCount[key]}
                   </h1>
-                  <h6 className="text-muted text-capitalize" style={{ marginBottom: "-5px", lineHeight: 1 }}>
+                  <p className="text-muted text-capitalize" style={{ marginBottom: "-12px" }}>
                     {key}
-                  </h6>
+                  </p>
                 </div>
               </Fab>
             ))}
@@ -478,7 +520,7 @@ const DetailsCard = ({ user, highlightIndex, id, selectedFloor = 0 }) => {
           {/* {selectedFloor === 0 ? <div className="text-secondary">{["Terrace", "Ground"][user.floor-1]}</div> : null} */}
           <div className="text-secondary">
             {selectedFloor === 0 && ["Terrace", "Ground"][user.floor - 1] + " - "}
-            {getHHMM(user.created?.seconds * 1000)}
+            {user.modified?.seconds ? getHHMM(user.modified?.seconds * 1000) : getHHMM(new Date())}
           </div>
         </h6>
         <div className="d-flex justify-content-between">
@@ -494,7 +536,7 @@ const DetailsCard = ({ user, highlightIndex, id, selectedFloor = 0 }) => {
   );
 };
 
-function CustomTabPanel(props) {
+const CustomTabPanel = (props) => {
   const { children, value, index, ...other } = props;
 
   return (
@@ -508,6 +550,123 @@ function CustomTabPanel(props) {
       {value === index && <Box sx={{ p: 1 }}>{children}</Box>}
     </div>
   );
-}
+};
+
+const MenuButton = () => {
+  const [anchorEl, setAnchorEl] = React.useState(null);
+  const open = Boolean(anchorEl);
+  const handleClick = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+  return (
+    <div>
+      <IconButton id="long-button" aria-describedby="more" onClick={handleClick}>
+        <MoreVertIcon />
+      </IconButton>
+      <Popover
+        id="more"
+        open={open}
+        anchorEl={anchorEl}
+        onClose={handleClose}
+        anchorOrigin={{
+          vertical: "bottom",
+          horizontal: "left",
+        }}
+      >
+        <TodaysSnack />
+      </Popover>
+    </div>
+  );
+};
+
+const TodaysSnack = () => {
+  const [textValue, setTextValue] = useState("");
+  const [todaysSnack, setTodaysSnack] = useState("");
+  const [snackData, setSnackData] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+
+  // Fetch Today's Snack
+  useEffect(() => {
+    let unsub;
+    const fetchSnackData = async () => {
+      const dateToday = await fetchDate();
+      const q = query(
+        collection(db, "snacks"),
+        where("created", ">=", new Date(dateToday.getFullYear(), dateToday.getMonth(), dateToday.getDate())),
+        where("created", "<", new Date(dateToday.getTime() + 86400000))
+      );
+      unsub = onSnapshot(q, (querySnapshot) => {
+        let snackData = null;
+        if (querySnapshot.size) {
+          snackData = querySnapshot.docs.map((doc) => doc.data())[0];
+        }
+        setSnackData(snackData);
+        setTextValue(snackData?.snack);
+        setTodaysSnack(snackData?.snack);
+      });
+    };
+    fetchSnackData();
+
+    return () => {
+      if (unsub) unsub();
+      setTodaysSnack(null);
+    };
+  }, []);
+
+  // Function to set today's snack
+  const setSnack = async (snack) => {
+    console.log("Adding..........");
+    const dateToday = await fetchDate();
+    const snackData = {
+      created: firebase.firestore.FieldValue.serverTimestamp(),
+      snack: snack,
+    };
+    const q = query(
+      collection(db, "snacks"),
+      where("created", ">=", new Date(dateToday.getFullYear(), dateToday.getMonth(), dateToday.getDate())),
+      where("created", "<", new Date(dateToday.getTime() + 86400000))
+    );
+    const querySnapshot = await getDocs(q);
+    if (querySnapshot.size) {
+      querySnapshot.forEach((doc) => {
+        setDoc(doc.ref, snackData);
+      });
+    } else {
+      addDoc(collection(db, "snacks"), snackData);
+    }
+  };
+
+  useEffect(() => {
+    if (!isEditing && textValue && textValue !== todaysSnack) setSnack(textValue);
+  }, [isEditing]);
+
+  return (
+    <Stack direction="column" sx={{ width: 260 }} className="p-3">
+      <div className="d-flex justify-content-between">
+        <p className="m-0">Today's Snack</p>
+        {snackData?.created && <p className="text-muted">{getDDMMYYYY(snackData.created.seconds * 1000)}</p>}
+      </div>
+      <div className="border m-0 p-2">
+        <Input
+          fullWidth
+          placeholder="Enter Today's Snack"
+          value={textValue}
+          onChange={(e) => setTextValue(e.target.value)}
+          disabled={!isEditing}
+          endAdornment={
+            <InputAdornment position="end">
+              <IconButton onClick={() => setIsEditing(!isEditing)}>
+                {isEditing ? <CheckIcon /> : <EditIcon />}
+              </IconButton>
+            </InputAdornment>
+          }
+        />
+      </div>
+    </Stack>
+  );
+};
 
 export default VendorPage;
