@@ -372,8 +372,15 @@ const VendorPage = () => {
               <div ref={tableRef} style={{ padding: "25px" }}>
                 <div style={{ display: "flex", gap: "10px", alignItems: "center", justifyContent: "space-between", flexDirection: "column", paddingBottom: "10px" }}>
                   <img src={GatewayLogo} alt="logo" style={{ maxHeight: "110px", maxWidth: "130px", paddingBottom: "10px" }} />
-                  <div style={{ fontWeight: "500" }}>
-                    {"From : " + getDDMMYYYY(dateRangeFilter[0].getTime()) + " - To :  " + getDDMMYYYY(dateRangeFilter[1].getTime())}
+                  <div>
+                    <span style={{ fontWeight: "600" }}>
+                      From :
+                    </span>
+                    {" " + getDDMMYYYY(dateRangeFilter[0].getTime()) + " "}
+                    <span style={{ fontWeight: "600" }}>
+                      To :
+                    </span>
+                    {" " + getDDMMYYYY(dateRangeFilter[1].getTime())}
                   </div>
                 </div>
                 <table style={{ borderCollapse: "collapse", width: "100%" }}>
