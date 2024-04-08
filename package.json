@@ -11,6 +11,8 @@
     "crypto-js": "^4.2.0",
     "dayjs": "^1.11.10",
     "firebase": "^10.8.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^2.5.1",
     "react": "^18.2.0",
     "react-bootstrap": "^2.1.0",
     "react-dom": "18.2.0",

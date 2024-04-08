@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import firebase from "firebase/compat/app";
 import "firebase/compat/firestore";
-import { addDoc, collection, getDocs, onSnapshot, orderBy, query, setDoc, sum, where } from "firebase/firestore";
+import { addDoc, collection, getAggregateFromServer, getDocs, onSnapshot, orderBy, query, setDoc, sum, where } from "firebase/firestore";
 import { db } from "../utils/firebase";
 import QrScanner from "./QrScanner";
 import { fetchDate, getDDMMYYYY, getHHMM } from "../utils/getDate";
@@ -9,6 +9,7 @@ import {
   Alert,
   Backdrop,
   Box,
+  Button,
   CircularProgress,
   Fab,
   IconButton,
@@ -31,6 +32,9 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import DateRangePicker from "@wojtekmaj/react-daterange-picker";
 import "@wojtekmaj/react-daterange-picker/dist/DateRangePicker.css";
 import "react-calendar/dist/Calendar.css";
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+import DownloadIcon from '@mui/icons-material/Download';
 
 var showSnackbar = null;
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -43,6 +47,7 @@ const VendorPage = () => {
   const [highlightIndex, setHighlightIndex] = useState(null);
   const [selectedFloor, setSelectedFloor] = useState(0);
   const [isCameraOpen, setIsCameraOpen] = useState(true);
+  const [processedData, setProcessedData] = useState({});
   showSnackbar = setSnackbarData;
 
   // State for Date Filter
@@ -148,7 +153,32 @@ const VendorPage = () => {
       setIsLoading(false);
     }
   };
+  const processDataWithTotal = (data) => {
+    let countsByDate = {};
+    let total = { isMorning: 0, isEvening: 0, isSnack: 0 };
 
+    data.forEach((item) => {
+      const date = item.date;
+      countsByDate[date] = countsByDate[date] || { date, isMorning: 0, isEvening: 0, isSnack: 0 };
+
+      if (item.isMorning) {
+        countsByDate[date].isMorning++;
+        total.isMorning++;
+      }
+      if (item.isEvening) {
+        countsByDate[date].isEvening++;
+        total.isEvening++;
+      }
+      if (item.isSnack) {
+        countsByDate[date].isSnack++;
+        total.isSnack++;
+      }
+    });
+
+    const processedData = Object.values(countsByDate);
+
+    return { processedData, total };
+  };
   // Fetch and listen for updates from Firebase for Today's Data
   useEffect(() => {
     if (getDDMMYYYY(dateRangeFilter[0]) !== getDDMMYYYY(dateRangeFilter[1]) || dateFilter !== null) return;
@@ -168,6 +198,7 @@ const VendorPage = () => {
           const data = querySnapshot.docs.map((doc) => doc.data());
           setScannedUsers(data);
           setHighlightIndex(0);
+          setProcessedData(processDataWithTotal(data));
           setScannedCount({
             morning: data.filter((user) => user.isMorning).length,
             evening: data.filter((user) => user.isEvening).length,
@@ -191,14 +222,15 @@ const VendorPage = () => {
     };
   }, [selectedFloor]);
 
+
   // Fetch Filtered Data from Firebase
-  useEffect(async() => {
+  useEffect(() => {
     const isRange = dateRangeFilter[0].getTime() !== dateRangeFilter[1].getTime();
     if (dateFilter || isRange) {
       setIsPrimaryLoading(true);
-      q = collection(db, "scannedData");
-      const snap = await getAggregateFromServer(q)
-      console.log("snap===>", snap.data().count());
+      let q = collection(db, "scannedData");
+      // const snap = getAggregateFromServer(q)
+      // console.log("snap===>", snap.data().count());
 
       const filterConditions = [
         dateFilter ? where("date", "==", dateFilter) : null,
@@ -207,13 +239,14 @@ const VendorPage = () => {
         selectedFloor ? where("floor", "==", selectedFloor) : null,
       ].filter((condition) => condition !== null);
 
-      const q = query(collection(db, "scannedData"), ...filterConditions, orderBy("modified", "desc"));
+      q = query(collection(db, "scannedData"), ...filterConditions, orderBy("modified", "desc"));
 
       // Fetch the data from Firebase on Date Change only once without snapshot
       getDocs(q).then((querySnapshot) => {
         if (querySnapshot.size) {
           const data = querySnapshot.docs.map((doc) => doc.data());
           setScannedUsers(data);
+          setProcessedData(processDataWithTotal(data))
           setScannedCount({
             morning: data.filter((user) => user.isMorning).length,
             evening: data.filter((user) => user.isEvening).length,
@@ -282,11 +315,115 @@ const VendorPage = () => {
   //   setTimeout(handleLoad, 1000);
   // }, [qrScannerDiv]);
 
+  const RenderTable = () => {
+    const tableRef = useRef(null);
+
+    const styles = {
+      header: {
+        backgroundColor: "#f2f2f2",
+        borderBottom: "1px solid #ddd",
+        borderRight: "1px solid #ddd", // Column border
+        padding: "8px",
+        textAlign: "left",
+      },
+      dateCell: {
+        borderBottom: "1px solid #ddd",
+        borderRight: "1px solid #ddd", // Column border
+        padding: "8px",
+        textAlign: "left",
+        fontWeight: "bold", // Make text bold
+      },
+      cell: {
+        borderBottom: "1px solid #ddd",
+        borderRight: "1px solid #ddd", // Column border
+        padding: "8px",
+        textAlign: "left",
+      },
+      totalRow: {
+        backgroundColor: "#e6e6e6",
+      },
+      totalCell: {
+        borderBottom: "1px solid #ddd",
+        borderRight: "1px solid #ddd", // Column border
+        padding: "8px",
+        textAlign: "left",
+      },
+    };
+
+    const generatePDF = () => {
+      const input = tableRef.current;
+
+      html2canvas(input).then((canvas) => {
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const imgWidth = 210; // A4 width in mm
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+        pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+        pdf.save('table.pdf');
+      });
+    };
+    return (
+      <div>
+        {
+          processedData.processedData ?
+            <div>
+              <div ref={tableRef} style={{ padding: "20px" }}>
+                <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                  <thead>
+                    <tr>
+                      <th style={styles.header}>Date</th>
+                      <th style={styles.header}>Morning</th>
+                      <th style={styles.header}>Evening</th>
+                      <th style={styles.header}>Snacks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {processedData?.processedData?.map((item, index) => (
+                      <tr key={index}>
+                        <td style={styles.dateCell}>{item.date}</td>
+                        <td style={styles.cell}>{item.isMorning}</td>
+                        <td style={styles.cell}>{item.isEvening}</td>
+                        <td style={styles.cell}>{item.isSnack}</td>
+                      </tr>
+                    ))}
+                    <tr style={styles.totalRow}>
+                      <td style={styles.dateCell}>Total</td>
+                      <td style={styles.totalCell}>{processedData?.total?.isMorning}</td>
+                      <td style={styles.totalCell}>{processedData?.total?.isEvening}</td>
+                      <td style={styles.totalCell}>{processedData?.total?.isSnack}</td>
+                    </tr>
+                    {/* <tr style={styles.totalRow}>
+                      <td style={styles.dateCell}>Amount</td>
+                      <td style={styles.totalCell}>{parseInt(processedData?.total?.isMorning) * 20}</td>
+                      <td style={styles.totalCell}>{parseInt(processedData?.total?.isEvening) * 20}</td>
+                      <td style={styles.totalCell}>{parseInt(processedData?.total?.isSnack) * 30}</td>
+                    </tr>
+                    <tr style={styles.totalRow}>
+                      <td style={{ ...styles.totalCell, fontWeight: "bold" }}>Total Amount</td>
+                      <td colSpan={3} style={{ ...styles.totalCell, fontWeight: "bold", textAlign: "center" }}>
+                        {(parseInt(processedData?.total?.isMorning) * 20) + (parseInt(processedData?.total?.isEvening) * 20) + (parseInt(processedData?.total?.isSnack) * 30)}
+                      </td>
+                    </tr> */}
+                  </tbody>
+                </table>
+              </div>
+              <Button variant="contained" color="success" sx={{ marginLeft: "20px", borderRadius: "30px" }} onClick={() => generatePDF()} aria-label="download-pdf">
+                <DownloadIcon /> Download
+              </Button>
+            </div>
+            : ""
+        }
+      </div>
+
+    )
+  }
+
   const renderScannedRecords = () => {
     return (
       <div>
         {scannedUsers.length ? (
-          scannedUsers.map((user, index) => (
+          scannedUsers.slice(0,20).map((user, index) => (
             <DetailsCard
               user={user}
               key={index}
@@ -360,7 +497,7 @@ const VendorPage = () => {
                   onScan={!isLoading ? handleScanned : null}
                   setSnackbarData={setSnackbarData}
                   isLoading={isLoading}
-                  // style={{ width: window.screen.width }}
+                // style={{ width: window.screen.width }}
                 />
               )}
             </div>
@@ -388,7 +525,6 @@ const VendorPage = () => {
               </div>
             </>
           )}
-
           {/* Counts */}
           <div
             className="d-flex p-1 justify-content-around align-items-center"
@@ -414,7 +550,10 @@ const VendorPage = () => {
             ))}
           </div>
         </div>
+        <div>
+          <RenderTable />
 
+        </div>
         {/* Tab Panels || Detail Cards */}
         <CustomTabPanel value={selectedFloor} index={0}>
           {renderScannedRecords()}
@@ -461,7 +600,7 @@ const VendorPage = () => {
             >
               <LocalizationProvider dateAdapter={AdapterDayjs}>
                 <MobileDatePicker
-                  open={isDatePickerOpen}
+                  open={false}
                   closeOnSelect={true}
                   disableFuture={true}
                   onClose={() => setDatePickerOpen(false)}
@@ -665,6 +804,7 @@ const TodaysSnack = () => {
           }
         />
       </div>
+
     </Stack>
   );
 };
