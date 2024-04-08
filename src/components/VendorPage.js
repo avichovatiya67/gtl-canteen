@@ -35,6 +35,7 @@ import "react-calendar/dist/Calendar.css";
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import DownloadIcon from '@mui/icons-material/Download';
+import GatewayLogo from "../assets/gateway.png";
 
 var showSnackbar = null;
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -368,7 +369,13 @@ const VendorPage = () => {
         {
           processedData.processedData ?
             <div>
-              <div ref={tableRef} style={{ padding: "20px" }}>
+              <div ref={tableRef} style={{ padding: "25px" }}>
+                <div style={{ display: "flex", gap: "10px", alignItems: "center", justifyContent: "space-between", flexDirection: "column", paddingBottom: "10px" }}>
+                  <img src={GatewayLogo} alt="logo" style={{ maxHeight: "110px", maxWidth: "130px", paddingBottom: "10px" }} />
+                  <div style={{ fontWeight: "500" }}>
+                    {"From : " + getDDMMYYYY(dateRangeFilter[0].getTime()) + " - To :  " + getDDMMYYYY(dateRangeFilter[1].getTime())}
+                  </div>
+                </div>
                 <table style={{ borderCollapse: "collapse", width: "100%" }}>
                   <thead>
                     <tr>
@@ -423,7 +430,7 @@ const VendorPage = () => {
     return (
       <div>
         {scannedUsers.length ? (
-          scannedUsers.slice(0,20).map((user, index) => (
+          scannedUsers.slice(0, 20).map((user, index) => (
             <DetailsCard
               user={user}
               key={index}
