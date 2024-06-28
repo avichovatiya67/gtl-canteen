@@ -14,6 +14,7 @@ import { useLocation } from "react-router-dom";
 import canteen from "../assets/canteen.png";
 import { decryptData, encryptData } from "../utils/crypto";
 import { Backdrop, CircularProgress } from "@mui/material";
+import useTimer from "./useTimer";
 // const generateRandomName = () => {
 //   const firstNames = ["Alice", "Bob", "Charlie", "David", "Eva", "Frank", "Grace", "Henry", "Ivy", "Jack"];
 //   const lastNames = ["Smith", "Johnson", "Williams", "Jones", "Brown", "Davis", "Miller", "Wilson", "Moore", "Taylor"];
@@ -34,14 +35,12 @@ const UserPage = () => {
   // 0 ==> not scanned/disabled, 1 ==> available/clickable, 2 ==> already scanned/scanned
   const [userScanData, setUserScanData] = useState(null);
   const [todaysSnack, setTodaysSnack] = useState(null);
+  const [userScannedData, setUserScannedData] = useState({Morning:0, Evening:0, Snack:0})
   let search = useLocation().search;
   let params = new URLSearchParams(search);
   let uid = parseInt(params.get("uid"));
   let uname = params.get("uname");
   const iconSize = { height: "90px", width: "90px" };
-  
-  console.log(uid, uname);
-
   const handleProductClick = async (product) => {
     if (selectedProduct === product) return;
     setSelectedProduct(product);
@@ -70,8 +69,11 @@ const UserPage = () => {
         hours: parseInt(data.eveningStartTime.split(":")[0]),
         minutes: parseInt(data.eveningStartTime.split(":")[1]),
       },
+      maxMorning: data.isMorning,
+      maxEvening: data.isEvening,
+      maxSnacks: data.isSnacks
     };
-  };
+  }
 
   // Fetch User's Scan Data
   useEffect(() => {
@@ -98,10 +100,16 @@ const UserPage = () => {
           if (querySnapshot.size) {
             const data = querySnapshot.docs.map((doc) => doc.data())[0];
             scanData = {
-              isMorning: dateToday <= morningEndTime ? (data.isMorning ? 2 : 1) : 0,
-              isEvening: dateToday >= eveningStartTime ? (data.isEvening ? 2 : 1) : 0,
-              isSnack: dateToday >= eveningStartTime ? (data.isSnack ? 2 : 1) : 0,
+              isMorning: dateToday <= morningEndTime ? (data.isMorning && data.count.isMorning >= configTime.maxMorning ? 2 : 1) : 0,
+              isEvening: dateToday >= eveningStartTime ? (data.isEvening && data.count.isEvening >= configTime.maxEvening ? 2 : 1) : 0,
+              isSnack: dateToday >= eveningStartTime ? (data.isSnack && data.count.isSnack >= configTime.maxSnacks ? 2 : 1) : 0,
             };
+            console.log("data", data);
+            setUserScannedData({
+              Morning:data.count ? data.count.isMorning : data.isMorning ? 1 : 0, 
+              Evening:data.count ? data.count.isEvening : data.isEvening ? 1 : 0,
+              Snack:data.count ? data.count.isSnack : data.isSnack ? 1 : 0 
+            })
           } else {
             scanData = {
               isMorning: dateToday <= morningEndTime ? 1 : 0,
@@ -109,9 +117,10 @@ const UserPage = () => {
               isSnack: dateToday >= eveningStartTime ? 1 : 0,
             };
           }
-          console.log(scanData);
           setUserScanData(scanData);
           setIsLoading(false);
+          setQrData(null);
+          setSelectedProduct(null)
         });
       }
     };
@@ -194,14 +203,17 @@ const UserPage = () => {
         style={{ width: "100%", fontSize: "10px", fontWeight: "bold" }}
       >
         {["Morning", "Evening", "Snack"].map((product, index) => (
+          <>
           <ProductCard
             key={index}
             product={product}
             selectedProduct={selectedProduct}
             onClick={handleProductClick}
             status={userScanData ? userScanData[`is${product}`] : 0}
+            userScannedData={userScannedData}
             style={{ ...iconSize }}
           />
+          </>
         ))}
       </div>
 
@@ -220,7 +232,7 @@ const UserPage = () => {
   );
 };
 
-const ProductCard = ({ product, selectedProduct, onClick, status = 2, style }) => {
+const ProductCard = ({ product, selectedProduct, onClick, status = 2, userScannedData, style }) => {
   const icons = {
     Morning: {
       0: tea_disabled,
@@ -238,6 +250,11 @@ const ProductCard = ({ product, selectedProduct, onClick, status = 2, style }) =
       2: snacks_disabled,
     },
   };
+
+  const renderKeyValue = (user, key) => {
+    const value = user[key];
+    return <div style={{fontWeight:650, fontSize:"9px"}}>{`${key.toUpperCase()} (${value})`}</div>;
+  }
   return (
     <div
       className={
@@ -250,8 +267,8 @@ const ProductCard = ({ product, selectedProduct, onClick, status = 2, style }) =
     >
       {status === 2 && <img style={{ position: "fixed", ...style }} src={scanned} />}
       <div className="mt-3 d-flex flex-column gap-2 align-items-center">
-        <img height={"70%"} width={"70%"} src={icons[product][status]} alt={product} />
-        {product.toUpperCase()}
+        <img height={"65%"} width={"65%"} src={icons[product][status]} alt={product} />
+        {renderKeyValue(userScannedData,product) }
       </div>
     </div>
   );

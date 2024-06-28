@@ -91,7 +91,6 @@ const VendorPage = () => {
       data = data && typeof data === "object" ? data : null;
       const date = await fetchDate();
       const formattedDate = getDDMMYYYY(date);
-
       // Store the scanned data in Firebase
       if (data?.date === formattedDate) {
         let newDoc = {
@@ -100,6 +99,11 @@ const VendorPage = () => {
           isMorning: data.product === "Morning",
           isEvening: data.product === "Evening",
           isSnack: data.product === "Snack",
+          count: {
+            isMorning: data.product === "Morning" ? 1 : 0,
+            isEvening: data.product === "Evening" ? 1 : 0,
+            isSnack: data.product === "Snack" ? 1 : 0,
+          },
           date: formattedDate,
           floor: selectedFloor,
           created: firebase.firestore.FieldValue.serverTimestamp(),
@@ -109,23 +113,32 @@ const VendorPage = () => {
         var existingDoc = await verifyData(newDoc, data.product);
         if (existingDoc) {
           const productStatus = verifyProductStatus(existingDoc, data.product);
-          if (productStatus) {
+          // if (productStatus) {
             // Already Availed
-            setSnackbarData({ message: "Already Availed!", severity: "error" });
+            // setSnackbarData({ message: "Already Availed!", severity: "error" });
             // console.log("Already Availed!");
-          } else {
+          // } else {
             // Entry Exists but not Availed
             const updatedDoc = {
               floor: selectedFloor,
               modified: firebase.firestore.FieldValue.serverTimestamp(),
+              count: existingDoc.count || { isMorning:0, isEvening: 0, isSnack: 0 }
             };
-            if (data.product === "Morning") updatedDoc.isMorning = true;
-            else if (data.product === "Evening") updatedDoc.isEvening = true;
-            else if (data.product === "Snack") updatedDoc.isSnack = true;
+            
+            if (data.product === "Morning") {
+              updatedDoc.isMorning = true;
+              updatedDoc.count.isMorning = parseInt(existingDoc.count?.isMorning) + 1 || 1;
+            } else if (data.product === "Evening") {
+              updatedDoc.isEvening = true;
+              updatedDoc.count.isEvening = parseInt(existingDoc.count?.isEvening) + 1 || 1;
+            } else if (data.product === "Snack") {
+              updatedDoc.isSnack = true;
+              updatedDoc.count.isSnack = parseInt(existingDoc.count?.isSnack) + 1 || 1;
+            }
             const modifiedData = await db.collection("scannedData").doc(existingDoc.id).update(updatedDoc);
             setSnackbarData({ message: "Scan Verified!", severity: "success" });
             // console.log("Document modified with ID: ", modifiedData);
-          }
+          // }
         } else {
           // New Entry
           // const createdData = await setDoc(doc(db, "scannedData", newDoc.empId+''), newDoc)
@@ -183,6 +196,30 @@ const VendorPage = () => {
     return { processedData, total };
   };
 
+  const getScannedCount = (data) => {
+    let morningCount = 0;
+    let eveningCount = 0;
+    let snackCount = 0;
+
+    data.forEach((user) => {
+        if (user.count) {
+            morningCount += user.count.isMorning;
+            eveningCount += user.count.isEvening;
+            snackCount += user.count.isSnack;
+        } else {
+            morningCount += user.isMorning ? 1 : 0;
+            eveningCount += user.isEvening ? 1 : 0;
+            snackCount += user.isSnack ? 1 : 0;
+        }
+    });
+
+    return {
+        morning: morningCount,
+        evening: eveningCount,
+        snack: snackCount
+    };
+}
+
   // Fetch and listen for updates from Firebase for Today's Data
   useEffect(() => {
     if (getDDMMYYYY(dateRangeFilter[0]) !== getDDMMYYYY(dateRangeFilter[1]) || dateFilter !== null) return;
@@ -203,11 +240,8 @@ const VendorPage = () => {
           setScannedUsers(data);
           setHighlightIndex(0);
           setProcessedData(processDataWithTotal(data));
-          setScannedCount({
-            morning: data.filter((user) => user.isMorning).length,
-            evening: data.filter((user) => user.isEvening).length,
-            snack: data.filter((user) => user.isSnack).length,
-          });
+          const scanned = getScannedCount(data);
+          setScannedCount(scanned);
         } else {
           setScannedUsers([]);
           setScannedCount({
@@ -660,6 +694,12 @@ const VendorPage = () => {
   );
 };
 
+function renderKeyValue(user, key) {
+  const slicedKey = key.slice(2);
+  const value = user.count ? user?.count?.[key] : user[key] ? 1 : 0;
+  return `${slicedKey} (${value})`;
+}
+
 const DetailsCard = ({ user, highlightIndex, id, selectedFloor = 0 }) => {
   return (
     <div
@@ -682,7 +722,8 @@ const DetailsCard = ({ user, highlightIndex, id, selectedFloor = 0 }) => {
           {["isMorning", "isEvening", "isSnack"].map((key, index) => (
             <div key={index} className="d-flex flex-column justify-content-end align-items-center">
               {user[key] ? <VerifiedIcon color="success" /> : <NewReleasesIcon color="disabled" />}
-              <>{key.slice(2)}</>
+              <>{renderKeyValue(user, key) }
+              </>
             </div>
           ))}
         </div>
