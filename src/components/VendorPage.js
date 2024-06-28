@@ -154,6 +154,8 @@ const VendorPage = () => {
       setIsLoading(false);
     }
   };
+
+  // Count data for report
   const processDataWithTotal = (data) => {
     let countsByDate = {};
     let total = { isMorning: 0, isEvening: 0, isSnack: 0 };
@@ -180,6 +182,7 @@ const VendorPage = () => {
 
     return { processedData, total };
   };
+
   // Fetch and listen for updates from Firebase for Today's Data
   useEffect(() => {
     if (getDDMMYYYY(dateRangeFilter[0]) !== getDDMMYYYY(dateRangeFilter[1]) || dateFilter !== null) return;
@@ -222,7 +225,6 @@ const VendorPage = () => {
       if (unsub) unsub();
     };
   }, [selectedFloor]);
-
 
   // Fetch Filtered Data from Firebase
   useEffect(() => {
@@ -316,6 +318,7 @@ const VendorPage = () => {
   //   setTimeout(handleLoad, 1000);
   // }, [qrScannerDiv]);
 
+  // Table to display report
   const RenderTable = () => {
     const tableRef = useRef(null);
 
@@ -564,10 +567,9 @@ const VendorPage = () => {
             ))}
           </div>
         </div>
-        <div>
+        {selectedFloor === 0 && getDDMMYYYY(dateRangeFilter[0]) !== getDDMMYYYY(dateRangeFilter[1]) && <div>
           <RenderTable />
-
-        </div>
+        </div>}
         {/* Tab Panels || Detail Cards */}
         <CustomTabPanel value={selectedFloor} index={0}>
           {renderScannedRecords()}
