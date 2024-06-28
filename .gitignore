@@ -6,3 +6,4 @@ package-lock.json
 .env.production
 .firebaserc
 .firebase/hosting.YnVpbGQ.cache
+build

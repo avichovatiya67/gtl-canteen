@@ -39,6 +39,8 @@ const UserPage = () => {
   let uid = parseInt(params.get("uid"));
   let uname = params.get("uname");
   const iconSize = { height: "90px", width: "90px" };
+  
+  console.log(uid, uname);
 
   const handleProductClick = async (product) => {
     if (selectedProduct === product) return;
@@ -107,6 +109,7 @@ const UserPage = () => {
               isSnack: dateToday >= eveningStartTime ? 1 : 0,
             };
           }
+          console.log(scanData);
           setUserScanData(scanData);
           setIsLoading(false);
         });
