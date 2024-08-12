@@ -23,4 +23,23 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-export { db };
+async function getMaxCountData() {
+  try {
+    const maxCountCollectionRef = db.collection('config');
+    const querySnapshot = await maxCountCollectionRef.limit(1).get();
+
+    if (querySnapshot.empty) {
+      console.log('No data found in maxCount collection');
+      return null;
+    }
+
+    const firstDoc = querySnapshot.docs[0];
+    const data = firstDoc.data();
+    return data;
+  } catch (error) {
+    console.error('Error getting max count data:', error);
+    return null;
+  }
+}
+
+export { db, getMaxCountData };

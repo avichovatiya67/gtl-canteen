@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import firebase from "firebase/compat/app";
 import "firebase/compat/firestore";
-import { addDoc, collection, getDocs, onSnapshot, orderBy, query, setDoc, sum, where } from "firebase/firestore";
+import { addDoc, collection, getAggregateFromServer, getDocs, onSnapshot, orderBy, query, setDoc, sum, where } from "firebase/firestore";
 import { db } from "../utils/firebase";
 import QrScanner from "./QrScanner";
 import { fetchDate, getDDMMYYYY, getHHMM } from "../utils/getDate";
@@ -9,6 +9,7 @@ import {
   Alert,
   Backdrop,
   Box,
+  Button,
   CircularProgress,
   Fab,
   IconButton,
@@ -31,6 +32,10 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import DateRangePicker from "@wojtekmaj/react-daterange-picker";
 import "@wojtekmaj/react-daterange-picker/dist/DateRangePicker.css";
 import "react-calendar/dist/Calendar.css";
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+import DownloadIcon from '@mui/icons-material/Download';
+import GatewayLogo from "../assets/gateway.png";
 
 var showSnackbar = null;
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -43,6 +48,7 @@ const VendorPage = () => {
   const [highlightIndex, setHighlightIndex] = useState(null);
   const [selectedFloor, setSelectedFloor] = useState(0);
   const [isCameraOpen, setIsCameraOpen] = useState(true);
+  const [processedData, setProcessedData] = useState({});
   showSnackbar = setSnackbarData;
 
   // State for Date Filter
@@ -85,7 +91,6 @@ const VendorPage = () => {
       data = data && typeof data === "object" ? data : null;
       const date = await fetchDate();
       const formattedDate = getDDMMYYYY(date);
-
       // Store the scanned data in Firebase
       if (data?.date === formattedDate) {
         let newDoc = {
@@ -94,6 +99,11 @@ const VendorPage = () => {
           isMorning: data.product === "Morning",
           isEvening: data.product === "Evening",
           isSnack: data.product === "Snack",
+          count: {
+            isMorning: data.product === "Morning" ? 1 : 0,
+            isEvening: data.product === "Evening" ? 1 : 0,
+            isSnack: data.product === "Snack" ? 1 : 0,
+          },
           date: formattedDate,
           floor: selectedFloor,
           created: firebase.firestore.FieldValue.serverTimestamp(),
@@ -103,23 +113,32 @@ const VendorPage = () => {
         var existingDoc = await verifyData(newDoc, data.product);
         if (existingDoc) {
           const productStatus = verifyProductStatus(existingDoc, data.product);
-          if (productStatus) {
+          // if (productStatus) {
             // Already Availed
-            setSnackbarData({ message: "Already Availed!", severity: "error" });
+            // setSnackbarData({ message: "Already Availed!", severity: "error" });
             // console.log("Already Availed!");
-          } else {
+          // } else {
             // Entry Exists but not Availed
             const updatedDoc = {
               floor: selectedFloor,
               modified: firebase.firestore.FieldValue.serverTimestamp(),
+              count: existingDoc.count || { isMorning:0, isEvening: 0, isSnack: 0 }
             };
-            if (data.product === "Morning") updatedDoc.isMorning = true;
-            else if (data.product === "Evening") updatedDoc.isEvening = true;
-            else if (data.product === "Snack") updatedDoc.isSnack = true;
+            
+            if (data.product === "Morning") {
+              updatedDoc.isMorning = true;
+              updatedDoc.count.isMorning = parseInt(existingDoc.count?.isMorning) + 1 || 1;
+            } else if (data.product === "Evening") {
+              updatedDoc.isEvening = true;
+              updatedDoc.count.isEvening = parseInt(existingDoc.count?.isEvening) + 1 || 1;
+            } else if (data.product === "Snack") {
+              updatedDoc.isSnack = true;
+              updatedDoc.count.isSnack = parseInt(existingDoc.count?.isSnack) + 1 || 1;
+            }
             const modifiedData = await db.collection("scannedData").doc(existingDoc.id).update(updatedDoc);
             setSnackbarData({ message: "Scan Verified!", severity: "success" });
             // console.log("Document modified with ID: ", modifiedData);
-          }
+          // }
         } else {
           // New Entry
           // const createdData = await setDoc(doc(db, "scannedData", newDoc.empId+''), newDoc)
@@ -149,6 +168,71 @@ const VendorPage = () => {
     }
   };
 
+  // Count data for report
+  const processDataWithTotal = (data) => {
+    let countsByDate = {};
+    let total = { isMorning: 0, isEvening: 0, isSnack: 0 };
+
+    data.forEach((item) => {
+      const date = item.date;
+      countsByDate[date] = countsByDate[date] || { date, isMorning: 0, isEvening: 0, isSnack: 0 };
+
+      if (item.count) {
+        // For Count after the update
+        total.isMorning += item.count.isMorning || 0;
+        countsByDate[date].isMorning += item.count.isMorning || 0;
+
+        total.isEvening += item.count.isEvening || 0;
+        countsByDate[date].isEvening += item.count.isEvening || 0;
+
+        total.isSnack += item.count.isSnack || 0;
+        countsByDate[date].isSnack += item.count.isSnack || 0;
+      } else {
+        // For Boolean flags before the update
+        if (item.isMorning) {
+          countsByDate[date].isMorning++;
+          total.isMorning++;
+        }
+        if (item.isEvening) {
+          countsByDate[date].isEvening++;
+          total.isEvening++;
+        }
+        if (item.isSnack) {
+          countsByDate[date].isSnack++;
+          total.isSnack++;
+        }
+      }
+    });
+
+    const processedData = Object.values(countsByDate);
+
+    return { processedData, total };
+  };
+
+  const getScannedCount = (data) => {
+    let morningCount = 0;
+    let eveningCount = 0;
+    let snackCount = 0;
+
+    data.forEach((user) => {
+        if (user.count) {
+            morningCount += user.count.isMorning;
+            eveningCount += user.count.isEvening;
+            snackCount += user.count.isSnack;
+        } else {
+            morningCount += user.isMorning ? 1 : 0;
+            eveningCount += user.isEvening ? 1 : 0;
+            snackCount += user.isSnack ? 1 : 0;
+        }
+    });
+
+    return {
+        morning: morningCount,
+        evening: eveningCount,
+        snack: snackCount
+    };
+  }
+
   // Fetch and listen for updates from Firebase for Today's Data
   useEffect(() => {
     if (getDDMMYYYY(dateRangeFilter[0]) !== getDDMMYYYY(dateRangeFilter[1]) || dateFilter !== null) return;
@@ -168,11 +252,9 @@ const VendorPage = () => {
           const data = querySnapshot.docs.map((doc) => doc.data());
           setScannedUsers(data);
           setHighlightIndex(0);
-          setScannedCount({
-            morning: data.filter((user) => user.isMorning).length,
-            evening: data.filter((user) => user.isEvening).length,
-            snack: data.filter((user) => user.isSnack).length,
-          });
+          setProcessedData(processDataWithTotal(data));
+          const scanned = getScannedCount(data);
+          setScannedCount(scanned);
         } else {
           setScannedUsers([]);
           setScannedCount({
@@ -192,13 +274,11 @@ const VendorPage = () => {
   }, [selectedFloor]);
 
   // Fetch Filtered Data from Firebase
-  useEffect(async() => {
+  useEffect(() => {
     const isRange = dateRangeFilter[0].getTime() !== dateRangeFilter[1].getTime();
     if (dateFilter || isRange) {
       setIsPrimaryLoading(true);
-      q = collection(db, "scannedData");
-      const snap = await getAggregateFromServer(q)
-      console.log("snap===>", snap.data().count());
+      let q = collection(db, "scannedData");
 
       const filterConditions = [
         dateFilter ? where("date", "==", dateFilter) : null,
@@ -207,18 +287,21 @@ const VendorPage = () => {
         selectedFloor ? where("floor", "==", selectedFloor) : null,
       ].filter((condition) => condition !== null);
 
-      const q = query(collection(db, "scannedData"), ...filterConditions, orderBy("modified", "desc"));
+      q = query(collection(db, "scannedData"), ...filterConditions, orderBy("modified", "desc"));
 
       // Fetch the data from Firebase on Date Change only once without snapshot
       getDocs(q).then((querySnapshot) => {
         if (querySnapshot.size) {
           const data = querySnapshot.docs.map((doc) => doc.data());
           setScannedUsers(data);
-          setScannedCount({
-            morning: data.filter((user) => user.isMorning).length,
-            evening: data.filter((user) => user.isEvening).length,
-            snack: data.filter((user) => user.isSnack).length,
-          });
+          setProcessedData(processDataWithTotal(data))
+          const scanned = getScannedCount(data);
+          setScannedCount(scanned);
+          // setScannedCount({
+          //   morning: data.filter((user) => user.isMorning).length,
+          //   evening: data.filter((user) => user.isEvening).length,
+          //   snack: data.filter((user) => user.isSnack).length,
+          // });
         } else {
           setScannedUsers([]);
           setScannedCount({
@@ -282,11 +365,130 @@ const VendorPage = () => {
   //   setTimeout(handleLoad, 1000);
   // }, [qrScannerDiv]);
 
+  // Table to display report
+  const RenderTable = () => {
+    const tableRef = useRef(null);
+
+    const styles = {
+      header: {
+        backgroundColor: "#f2f2f2",
+        borderBottom: "1px solid #ddd",
+        borderRight: "1px solid #ddd", // Column border
+        padding: "8px",
+        textAlign: "left",
+      },
+      dateCell: {
+        borderBottom: "1px solid #ddd",
+        borderRight: "1px solid #ddd", // Column border
+        padding: "8px",
+        textAlign: "left",
+        fontWeight: "bold", // Make text bold
+      },
+      cell: {
+        borderBottom: "1px solid #ddd",
+        borderRight: "1px solid #ddd", // Column border
+        padding: "8px",
+        textAlign: "left",
+      },
+      totalRow: {
+        backgroundColor: "#e6e6e6",
+      },
+      totalCell: {
+        borderBottom: "1px solid #ddd",
+        borderRight: "1px solid #ddd", // Column border
+        padding: "8px",
+        textAlign: "left",
+      },
+    };
+
+    const generatePDF = () => {
+      const input = tableRef.current;
+
+      html2canvas(input).then((canvas) => {
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const imgWidth = 210; // A4 width in mm
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+        pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+        pdf.save('table.pdf');
+      });
+    };
+    return (
+      <div>
+        {
+          processedData.processedData 
+          ?
+            <div className="text-center">
+              <div ref={tableRef} style={{ padding: "25px" }}>
+                <div style={{ display: "flex", gap: "10px", alignItems: "center", justifyContent: "space-between", flexDirection: "column", paddingBottom: "10px" }}>
+                  <img src={GatewayLogo} alt="logo" style={{ maxHeight: "110px", maxWidth: "130px", paddingBottom: "10px" }} />
+                  <div>
+                    <span style={{ fontWeight: "600" }}>
+                      From :
+                    </span>
+                    {" " + getDDMMYYYY(dateRangeFilter[0].getTime()) + " "}
+                    <span style={{ fontWeight: "600" }}>
+                      To :
+                    </span>
+                    {" " + getDDMMYYYY(dateRangeFilter[1].getTime())}
+                  </div>
+                </div>
+                <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                  <thead>
+                    <tr>
+                      <th style={styles.header}>Date</th>
+                      <th style={styles.header}>Morning</th>
+                      <th style={styles.header}>Evening</th>
+                      <th style={styles.header}>Snacks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {processedData?.processedData?.map((item, index) => (
+                      <tr key={index}>
+                        <td style={styles.dateCell}>{item.date}</td>
+                        <td style={styles.cell}>{item.isMorning}</td>
+                        <td style={styles.cell}>{item.isEvening}</td>
+                        <td style={styles.cell}>{item.isSnack}</td>
+                      </tr>
+                    ))}
+                    <tr style={styles.totalRow}>
+                      <td style={styles.dateCell}>Total</td>
+                      <td style={styles.totalCell}>{processedData?.total?.isMorning}</td>
+                      <td style={styles.totalCell}>{processedData?.total?.isEvening}</td>
+                      <td style={styles.totalCell}>{processedData?.total?.isSnack}</td>
+                    </tr>
+                    {/* <tr style={styles.totalRow}>
+                      <td style={styles.dateCell}>Amount</td>
+                      <td style={styles.totalCell}>{parseInt(processedData?.total?.isMorning) * 20}</td>
+                      <td style={styles.totalCell}>{parseInt(processedData?.total?.isEvening) * 20}</td>
+                      <td style={styles.totalCell}>{parseInt(processedData?.total?.isSnack) * 30}</td>
+                    </tr>
+                    <tr style={styles.totalRow}>
+                      <td style={{ ...styles.totalCell, fontWeight: "bold" }}>Total Amount</td>
+                      <td colSpan={3} style={{ ...styles.totalCell, fontWeight: "bold", textAlign: "center" }}>
+                        {(parseInt(processedData?.total?.isMorning) * 20) + (parseInt(processedData?.total?.isEvening) * 20) + (parseInt(processedData?.total?.isSnack) * 30)}
+                      </td>
+                    </tr> */}
+                  </tbody>
+                </table>
+              </div>
+              <Button variant="contained" color="success" sx={{ marginLeft: "20px", borderRadius: "30px" }} onClick={() => generatePDF()} aria-label="download-pdf">
+                <DownloadIcon /> Download
+              </Button>
+            </div>
+          : null
+        }
+      </div>
+
+    )
+  }
+
   const renderScannedRecords = () => {
     return (
       <div>
         {scannedUsers.length ? (
-          scannedUsers.map((user, index) => (
+          scannedUsers.slice(0, 20).map((user, index) => (
             <DetailsCard
               user={user}
               key={index}
@@ -360,7 +562,7 @@ const VendorPage = () => {
                   onScan={!isLoading ? handleScanned : null}
                   setSnackbarData={setSnackbarData}
                   isLoading={isLoading}
-                  // style={{ width: window.screen.width }}
+                // style={{ width: window.screen.width }}
                 />
               )}
             </div>
@@ -388,7 +590,6 @@ const VendorPage = () => {
               </div>
             </>
           )}
-
           {/* Counts */}
           <div
             className="d-flex p-1 justify-content-around align-items-center"
@@ -414,7 +615,9 @@ const VendorPage = () => {
             ))}
           </div>
         </div>
-
+        {selectedFloor === 0 && getDDMMYYYY(dateRangeFilter[0]) !== getDDMMYYYY(dateRangeFilter[1]) && <div>
+          <RenderTable />
+        </div>}
         {/* Tab Panels || Detail Cards */}
         <CustomTabPanel value={selectedFloor} index={0}>
           {renderScannedRecords()}
@@ -461,7 +664,7 @@ const VendorPage = () => {
             >
               <LocalizationProvider dateAdapter={AdapterDayjs}>
                 <MobileDatePicker
-                  open={isDatePickerOpen}
+                  open={false}
                   closeOnSelect={true}
                   disableFuture={true}
                   onClose={() => setDatePickerOpen(false)}
@@ -505,6 +708,12 @@ const VendorPage = () => {
   );
 };
 
+function renderKeyValue(user, key) {
+  const slicedKey = key.slice(2);
+  const value = user.count ? user?.count?.[key] : user[key] ? 1 : 0;
+  return `${slicedKey} (${value})`;
+}
+
 const DetailsCard = ({ user, highlightIndex, id, selectedFloor = 0 }) => {
   return (
     <div
@@ -527,7 +736,8 @@ const DetailsCard = ({ user, highlightIndex, id, selectedFloor = 0 }) => {
           {["isMorning", "isEvening", "isSnack"].map((key, index) => (
             <div key={index} className="d-flex flex-column justify-content-end align-items-center">
               {user[key] ? <VerifiedIcon color="success" /> : <NewReleasesIcon color="disabled" />}
-              <>{key.slice(2)}</>
+              <>{renderKeyValue(user, key) }
+              </>
             </div>
           ))}
         </div>
@@ -665,6 +875,7 @@ const TodaysSnack = () => {
           }
         />
       </div>
+
     </Stack>
   );
 };

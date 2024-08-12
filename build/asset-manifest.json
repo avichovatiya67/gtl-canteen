@@ -1,28 +1,29 @@
 {
   "files": {
-    "main.css": "/static/css/main.4b008887.chunk.css",
-    "main.js": "/static/js/main.af84b437.chunk.js",
-    "main.js.map": "/static/js/main.af84b437.chunk.js.map",
-    "runtime-main.js": "/static/js/runtime-main.45b2b785.js",
-    "runtime-main.js.map": "/static/js/runtime-main.45b2b785.js.map",
-    "static/css/2.9817cc23.chunk.css": "/static/css/2.9817cc23.chunk.css",
-    "static/js/2.0fda00b7.chunk.js": "/static/js/2.0fda00b7.chunk.js",
-    "static/js/2.0fda00b7.chunk.js.map": "/static/js/2.0fda00b7.chunk.js.map",
+    "main.css": "/static/css/main.eabe2629.chunk.css",
+    "main.js": "/static/js/main.bab6d95e.chunk.js",
+    "runtime-main.js": "/static/js/runtime-main.47078946.js",
+    "static/css/2.99172246.chunk.css": "/static/css/2.99172246.chunk.css",
+    "static/js/2.bc655b2c.chunk.js": "/static/js/2.bc655b2c.chunk.js",
+    "static/js/3.2993959f.chunk.js": "/static/js/3.2993959f.chunk.js",
+    "static/js/4.c8a20d7d.chunk.js": "/static/js/4.c8a20d7d.chunk.js",
     "index.html": "/index.html",
-    "static/css/2.9817cc23.chunk.css.map": "/static/css/2.9817cc23.chunk.css.map",
-    "static/css/main.4b008887.chunk.css.map": "/static/css/main.4b008887.chunk.css.map",
-    "static/js/2.0fda00b7.chunk.js.LICENSE.txt": "/static/js/2.0fda00b7.chunk.js.LICENSE.txt",
+    "static/js/2.bc655b2c.chunk.js.LICENSE.txt": "/static/js/2.bc655b2c.chunk.js.LICENSE.txt",
+    "static/js/3.2993959f.chunk.js.LICENSE.txt": "/static/js/3.2993959f.chunk.js.LICENSE.txt",
+    "static/js/4.c8a20d7d.chunk.js.LICENSE.txt": "/static/js/4.c8a20d7d.chunk.js.LICENSE.txt",
     "static/media/canteen.2d11fbd6.png": "/static/media/canteen.2d11fbd6.png",
+    "static/media/foodpanda-food.ec49da34.gif": "/static/media/foodpanda-food.ec49da34.gif",
+    "static/media/gateway.8825116d.png": "/static/media/gateway.8825116d.png",
     "static/media/scanned.85444077.png": "/static/media/scanned.85444077.png",
     "static/media/snacks.e7c2fe49.png": "/static/media/snacks.e7c2fe49.png",
     "static/media/snacks_bw.1ae18535.png": "/static/media/snacks_bw.1ae18535.png",
     "static/media/tea_bw.fd4db84d.png": "/static/media/tea_bw.fd4db84d.png"
   },
   "entrypoints": [
-    "static/js/runtime-main.45b2b785.js",
-    "static/css/2.9817cc23.chunk.css",
-    "static/js/2.0fda00b7.chunk.js",
-    "static/css/main.4b008887.chunk.css",
-    "static/js/main.af84b437.chunk.js"
+    "static/js/runtime-main.47078946.js",
+    "static/css/2.99172246.chunk.css",
+    "static/js/2.bc655b2c.chunk.js",
+    "static/css/main.eabe2629.chunk.css",
+    "static/js/main.bab6d95e.chunk.js"
   ]
 }
