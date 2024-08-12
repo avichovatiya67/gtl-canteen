@@ -177,17 +177,30 @@ const VendorPage = () => {
       const date = item.date;
       countsByDate[date] = countsByDate[date] || { date, isMorning: 0, isEvening: 0, isSnack: 0 };
 
-      if (item.isMorning) {
-        countsByDate[date].isMorning++;
-        total.isMorning++;
-      }
-      if (item.isEvening) {
-        countsByDate[date].isEvening++;
-        total.isEvening++;
-      }
-      if (item.isSnack) {
-        countsByDate[date].isSnack++;
-        total.isSnack++;
+      if (item.count) {
+        // For Count after the update
+        total.isMorning += item.count.isMorning || 0;
+        countsByDate[date].isMorning += item.count.isMorning || 0;
+
+        total.isEvening += item.count.isEvening || 0;
+        countsByDate[date].isEvening += item.count.isEvening || 0;
+
+        total.isSnack += item.count.isSnack || 0;
+        countsByDate[date].isSnack += item.count.isSnack || 0;
+      } else {
+        // For Boolean flags before the update
+        if (item.isMorning) {
+          countsByDate[date].isMorning++;
+          total.isMorning++;
+        }
+        if (item.isEvening) {
+          countsByDate[date].isEvening++;
+          total.isEvening++;
+        }
+        if (item.isSnack) {
+          countsByDate[date].isSnack++;
+          total.isSnack++;
+        }
       }
     });
 
@@ -218,7 +231,7 @@ const VendorPage = () => {
         evening: eveningCount,
         snack: snackCount
     };
-}
+  }
 
   // Fetch and listen for updates from Firebase for Today's Data
   useEffect(() => {
@@ -266,8 +279,6 @@ const VendorPage = () => {
     if (dateFilter || isRange) {
       setIsPrimaryLoading(true);
       let q = collection(db, "scannedData");
-      // const snap = getAggregateFromServer(q)
-      // console.log("snap===>", snap.data().count());
 
       const filterConditions = [
         dateFilter ? where("date", "==", dateFilter) : null,
@@ -284,11 +295,13 @@ const VendorPage = () => {
           const data = querySnapshot.docs.map((doc) => doc.data());
           setScannedUsers(data);
           setProcessedData(processDataWithTotal(data))
-          setScannedCount({
-            morning: data.filter((user) => user.isMorning).length,
-            evening: data.filter((user) => user.isEvening).length,
-            snack: data.filter((user) => user.isSnack).length,
-          });
+          const scanned = getScannedCount(data);
+          setScannedCount(scanned);
+          // setScannedCount({
+          //   morning: data.filter((user) => user.isMorning).length,
+          //   evening: data.filter((user) => user.isEvening).length,
+          //   snack: data.filter((user) => user.isSnack).length,
+          // });
         } else {
           setScannedUsers([]);
           setScannedCount({
@@ -404,8 +417,9 @@ const VendorPage = () => {
     return (
       <div>
         {
-          processedData.processedData ?
-            <div>
+          processedData.processedData 
+          ?
+            <div className="text-center">
               <div ref={tableRef} style={{ padding: "25px" }}>
                 <div style={{ display: "flex", gap: "10px", alignItems: "center", justifyContent: "space-between", flexDirection: "column", paddingBottom: "10px" }}>
                   <img src={GatewayLogo} alt="logo" style={{ maxHeight: "110px", maxWidth: "130px", paddingBottom: "10px" }} />
@@ -463,7 +477,7 @@ const VendorPage = () => {
                 <DownloadIcon /> Download
               </Button>
             </div>
-            : ""
+          : null
         }
       </div>
 

@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 import tea from "../assets/tea.png";
 import tea_disabled from "../assets/tea_bw.png";
 import snacks from "../assets/snacks.png";
 import snacks_disabled from "../assets/snacks_bw.png";
 import scanned from "../assets/scanned.png";
+import successgif from "../assets/foodpanda-food.gif"
+// import successgif from ""
+// const alertaudio = "assets/alert-audio.mp3";
 
 import QRCode from "react-qr-code";
 import { fetchDate, getDDMMYYYY } from "../utils/getDate";
@@ -13,8 +16,9 @@ import { db } from "../utils/firebase";
 import { useLocation } from "react-router-dom";
 import canteen from "../assets/canteen.png";
 import { decryptData, encryptData } from "../utils/crypto";
-import { Backdrop, CircularProgress } from "@mui/material";
+import { Backdrop, CircularProgress, Button, Dialog, DialogContent, DialogContentText, DialogTitle, DialogActions, IconButton, Stack } from "@mui/material";
 import useTimer from "./useTimer";
+import { Close } from "@mui/icons-material";
 // const generateRandomName = () => {
 //   const firstNames = ["Alice", "Bob", "Charlie", "David", "Eva", "Frank", "Grace", "Henry", "Ivy", "Jack"];
 //   const lastNames = ["Smith", "Johnson", "Williams", "Jones", "Brown", "Davis", "Miller", "Wilson", "Moore", "Taylor"];
@@ -37,11 +41,16 @@ const UserPage = () => {
   const [userScanData, setUserScanData] = useState(null);
   const [todaysSnack, setTodaysSnack] = useState(null);
   const [userScannedData, setUserScannedData] = useState({Morning:0, Evening:0, Snack:0})
+  const previousScannedData = useRef();
+  const [dialogContent, setDialogContent] = useState("");
+  const audioRef = useRef();
+
   let search = useLocation().search;
   let params = new URLSearchParams(search);
   let uid = parseInt(params.get("uid"));
   let uname = params.get("uname");
   const iconSize = { height: "90px", width: "90px" };
+
   const handleProductClick = async (product) => {
     if (selectedProduct === product) return;
     setSelectedProduct(product);
@@ -76,6 +85,10 @@ const UserPage = () => {
     };
   }
 
+  const handleClose = () => {
+    setDialogContent("");
+  };
+
   // Fetch User's Scan Data
   useEffect(() => {
     let unsub;
@@ -102,15 +115,31 @@ const UserPage = () => {
           if (querySnapshot.size) {
             const data = querySnapshot.docs.map((doc) => doc.data())[0];
             scanData = {
-              isMorning: dateToday <= morningEndTime ? (data.isMorning || data?.count?.isMorning >= configTime.maxMorning ? 2 : 1) : 0,
-              isEvening: dateToday >= eveningStartTime ? (data.isEvening || data?.count?.isEvening >= configTime.maxEvening ? 2 : 1) : 0,
-              isSnack: dateToday >= eveningStartTime ? (data.isSnack || data?.count?.isSnack >= configTime.maxSnack ? 2 : 1) : 0,
+              isMorning: dateToday <= morningEndTime ? (data.isMorning && data?.count?.isMorning >= configTime.maxMorning ? 2 : 1) : 0,
+              isEvening: dateToday >= eveningStartTime ? (data.isEvening && data?.count?.isEvening >= configTime.maxEvening ? 2 : 1) : 0,
+              isSnack: dateToday >= eveningStartTime ? (data.isSnack && data?.count?.isSnack >= configTime.maxSnack ? 2 : 1) : 0,
             };
-            setUserScannedData({
-              Morning:data.count ? data.count.isMorning : data.isMorning ? 1 : 0, 
-              Evening:data.count ? data.count.isEvening : data.isEvening ? 1 : 0,
-              Snack:data.count ? data.count.isSnack : data.isSnack ? 1 : 0 
-            })
+            const newUserScannedData = {
+              Morning: data.count ? data.count.isMorning : data.isMorning ? 1 : 0,
+              Evening: data.count ? data.count.isEvening : data.isEvening ? 1 : 0,
+              Snack: data.count ? data.count.isSnack : data.isSnack ? 1 : 0
+            };
+            
+            // Check if there is any change in the state
+            if (previousScannedData.current &&
+              (newUserScannedData.Morning !== previousScannedData.current.Morning ||
+              newUserScannedData.Evening !== previousScannedData.current.Evening ||
+              newUserScannedData.Snack !== previousScannedData.current.Snack)
+            ) {
+              setDialogContent('!');
+            }
+            previousScannedData.current = newUserScannedData;
+            setUserScannedData(newUserScannedData);
+            // setUserScannedData({
+            //   Morning:data.count ? data.count.isMorning : data.isMorning ? 1 : 0, 
+            //   Evening:data.count ? data.count.isEvening : data.isEvening ? 1 : 0,
+            //   Snack:data.count ? data.count.isSnack : data.isSnack ? 1 : 0 
+            // })
           } else {
             scanData = {
               isMorning: dateToday <= morningEndTime ? 1 : 0,
@@ -161,6 +190,14 @@ const UserPage = () => {
       setTodaysSnack(null);
     };
   }, []);
+
+  // Audio alert
+  useEffect(() => {
+      if (Boolean(dialogContent) && audioRef.current)
+        audioRef.current.play().catch((error) => console.error(error));
+      else
+        audioRef.current.pause();
+  }, [dialogContent]);
 
   return (
     <div className="container text-center pt-3 pb-5 d-flex flex-column h-100">
@@ -222,15 +259,35 @@ const UserPage = () => {
 
       {/* Today's Snacks */}
       <h6 className="my-2 mt-4" style={{ height: "48px" }}>
-      {todaysSnack && (
-        "Today's Snack : "+todaysSnack
-      )}
+        {todaysSnack && ("Today's Snack : "+todaysSnack)}
       </h6>
 
       {/* Backdrop */}
       <Backdrop open={isLoading} >
         <CircularProgress color="inherit" />
       </Backdrop>
+
+      {/* Dialog / Popup */}
+      <Dialog open={Boolean(dialogContent)} onClose={handleClose} sx={{ '.MuiPaper-root': { borderRadius: '16px', } }} >
+        <Stack width="100%" sx={{ position: "absolute", float: "right", pt: 1, pr: 1 }}>
+          <IconButton sx={{alignSelf: "end"}} onClick={handleClose}><Close /></IconButton>
+        </Stack>
+        <DialogContent>
+          <img src={successgif} width={"100%"} />
+        </DialogContent>
+        {/* <DialogActions style={{ justifyContent: "center" }}>
+          <Button onClick={handleClose} variant="contained" style={{ borderRadius: "20px", backgroundColor: "#FAC430", color: "black" }}>
+            Thank you
+          </Button>
+        </DialogActions> */}
+      </Dialog>
+
+      {/* Audio alert */}
+      <div style={{ display: "none" }}>
+        <audio controls ref={audioRef}>
+          <source src="alert-audio.mp3" type="audio/mpeg" />
+        </audio>
+      </div>
     </div>
   );
 };
